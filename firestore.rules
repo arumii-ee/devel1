@@ -1,0 +1,18 @@
+rules_version = '2';
+// 우리집 냉장고 - 가족 공유 보안 규칙
+// 가족 코드(8자리)를 아는 사람만 그 가족의 재료를 읽고 쓸 수 있고,
+// 다른 가족 목록을 둘러보는 것(list)은 막습니다.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /families/{code} {
+      allow get, create: if code.size() == 8;
+
+      match /items/{itemId} {
+        allow read, delete: if code.size() == 8;
+        allow create, update: if code.size() == 8
+          && request.resource.data.name is string
+          && request.resource.data.name.size() <= 40;
+      }
+    }
+  }
+}

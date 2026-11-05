@@ -16,7 +16,9 @@
   - 요리를 누르면 기본 양념과 만드는 순서 표시
 - 위치별 탭 필터, 검색
 - 휴대폰 화면 기준 디자인, 다크 모드, 안드로이드 뒤로가기 버튼 지원
-- 데이터는 이 기기의 브라우저(localStorage)에 저장
+- **가족 공유**: 가족 코드(예: `K7PM-3QXA`)를 입력한 휴대폰끼리 목록이 실시간으로 함께 바뀜
+  - 누가 넣은 재료인지 이름 표시, 인터넷이 끊겨도 쓰고 연결되면 자동 전송
+- 가족 공유를 켜지 않으면 데이터는 이 기기의 브라우저(localStorage)에만 저장
 
 ## 사용 방법
 
@@ -28,20 +30,66 @@
 2. 잠시 후 나오는 주소(`https://<아이디>.github.io/<저장소>/`)를 휴대폰 Chrome이나 삼성 인터넷으로 열기
 3. 메뉴 → **홈 화면에 추가**를 누르면 앱처럼 쓸 수 있습니다
 
-> PC와 휴대폰의 데이터는 아직 서로 공유되지 않습니다(각 기기에 따로 저장). 아래 "가족 공유"가 다음 단계입니다.
+> 가족 공유를 켜기 전에는 기기마다 따로 저장됩니다. PC와 휴대폰, 가족끼리 같은 목록을 보려면 아래 "가족 공유 설정"을 한 번 해 주세요.
+
+## 가족 공유 설정 (처음 한 번, 관리하는 사람만)
+
+가족 공유는 구글의 무료 온라인 저장소 **Firebase Firestore**를 씁니다. 가정용 사용량은 무료 범위(Spark 요금제) 안에 충분히 들어갑니다.
+
+1. **프로젝트 만들기**
+   [Firebase 콘솔](https://console.firebase.google.com)에 구글 계정으로 로그인 → **프로젝트 추가** → 이름(예: `my-fridge`) 입력. Google 애널리틱스는 꺼도 됩니다.
+2. **데이터베이스 만들기**
+   왼쪽 메뉴 **빌드 → Firestore Database → 데이터베이스 만들기**
+   - 위치: `asia-northeast3 (서울)` 추천
+   - 시작 모드: **프로덕션 모드**
+3. **보안 규칙 붙여 넣기**
+   Firestore 화면의 **규칙** 탭 → 내용을 모두 지우고 이 저장소의 [`firestore.rules`](firestore.rules) 내용을 붙여 넣기 → **게시**
+4. **웹 앱 등록**
+   프로젝트 개요(톱니바퀴) → **프로젝트 설정 → 일반 → 내 앱 → 웹(`</>`)** → 앱 닉네임 입력 → 등록
+   화면에 나오는 `const firebaseConfig = { ... }` 안의 내용을 복사
+5. **설정값 붙여 넣기**
+   [`js/firebase-config.js`](js/firebase-config.js)의 `var FIREBASE_CONFIG = null;`을 복사한 값으로 바꾸기
+   ```js
+   var FIREBASE_CONFIG = {
+     apiKey: "AIza...",
+     authDomain: "my-fridge.firebaseapp.com",
+     projectId: "my-fridge",
+     storageBucket: "my-fridge.appspot.com",
+     messagingSenderId: "1234567890",
+     appId: "1:1234567890:web:abcdef"
+   };
+   ```
+   GitHub 웹사이트에서 파일을 열고 연필(✏️) 버튼으로 바로 고쳐도 됩니다.
+6. **GitHub에 올리기** → GitHub Pages 주소로 연 모든 휴대폰에 적용됩니다.
+
+> `apiKey`는 비밀번호가 아니라 "어느 Firebase 프로젝트인지" 알려주는 값이라 공개 저장소에 올려도 괜찮습니다. 데이터 보호는 3번의 보안 규칙과 가족 코드가 담당합니다.
+
+### 가족과 함께 쓰기
+1. 한 사람이 앱에서 **사람 모양 버튼 → 내 이름 입력 → 새 가족 냉장고 만들기**
+   (이 기기에 있던 재료가 함께 올라갑니다)
+2. **초대하기**를 눌러 카카오톡 등으로 가족 코드를 보내기
+3. 가족은 앱에서 **사람 모양 버튼 → 내 이름 입력 → 가족 코드로 참여**
+4. 위쪽에 `가족 냉장고 K7PM-3QXA · 실시간 동기화 중`이 보이면 연결된 것입니다.
+
+- 가족 코드를 아는 사람은 누구나 목록을 보고 고칠 수 있으니 가족끼리만 나눠 주세요.
+- **가족 공유 그만하기**를 누르면 그 기기만 공유에서 빠지고, 보던 목록은 그 기기에 복사됩니다.
 
 ## 파일 구조
 ```
 index.html            화면 구조
 css/style.css         디자인 (모바일 우선, 다크 모드)
-js/storage.js         저장소 어댑터 (지금은 localStorage)
+js/storage.js         저장소 (이 기기 / 가족 공유 전환)
+js/firebase-config.js 가족 공유용 Firebase 설정값 (직접 붙여 넣기)
+js/family.js          가족 공유 동기화 (Firestore)
+js/family-ui.js       가족 공유 화면
 js/ingredients.js     유통기한 계산 · 정렬 로직
 js/app.js             화면 그리기 · 버튼 동작
 js/recipe-data.js     내장 레시피 목록 · 재료 이름 매칭 규칙
 js/recipes.js         추천 레시피 계산
 manifest.webmanifest  홈 화면에 추가용 정보
+firestore.rules       Firestore 보안 규칙 (Firebase 콘솔에 붙여 넣기)
 ```
 
 ## 앞으로 계획
-- **가족 공유**: `js/storage.js`에 Firebase Firestore 같은 온라인 저장소 어댑터를 추가하고, "가족 코드"로 같은 냉장고를 함께 봅니다. 앱의 나머지 코드는 같은 인터페이스(`list / add / update / remove / subscribe`)를 쓰므로 그대로 둡니다.
+- **디자인 개편**: 기능 완성 후 진행 예정
 - **레시피 늘리기**: `js/recipe-data.js`에 같은 형식으로 추가하면 바로 추천에 반영됩니다. 이후 외부 레시피 API나 AI 추천으로 바꾸려면 `js/recipes.js`의 `recommend()`만 교체하면 됩니다.

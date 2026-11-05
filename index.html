@@ -17,9 +17,14 @@
       <div class="top-row">
         <h1>🧊 우리집 냉장고</h1>
         <div class="top-actions">
-          <button type="button" class="recipe-btn" id="recipeBtn">추천 레시피</button>
+          <button type="button" class="icon-btn" id="familyBtn" aria-label="가족 공유">
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="9" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 19c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="17" cy="9" r="2.4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16.5 14c2.6.2 4.5 2 4.5 4.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <span class="sync-dot" id="syncDot" hidden></span>
+          </button>
+          <button type="button" class="recipe-btn" id="recipeBtn">레시피</button>
         </div>
       </div>
+      <button type="button" class="sync-line" id="syncLine" hidden></button>
       <button type="button" class="alert-banner" id="alertBanner" hidden></button>
       <input type="search" id="search" class="search" placeholder="재료 검색" autocomplete="off" aria-label="재료 검색">
       <nav class="tabs" role="tablist" aria-label="보관 위치">
@@ -111,6 +116,20 @@
     <div class="panel-body" id="recipeBody"></div>
   </section>
 
+  <!-- 가족 공유 화면 -->
+  <section class="panel" id="familyPanel" role="dialog" aria-modal="true" aria-labelledby="familyTitle" hidden>
+    <header class="panel-head">
+      <button type="button" class="back" id="familyBack" aria-label="뒤로">
+        <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div>
+        <h2 id="familyTitle">가족 공유</h2>
+        <p class="panel-sub">가족과 같은 냉장고 목록 함께 보기</p>
+      </div>
+    </header>
+    <div class="panel-body" id="familyBody"></div>
+  </section>
+
   <div class="toast" id="toast" role="status" hidden>
     <span id="toastText"></span>
     <button type="button" id="toastAction" hidden>실행 취소</button>
@@ -118,8 +137,11 @@
 
   <script src="js/storage.js"></script>
   <script src="js/ingredients.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/family.js"></script>
   <script src="js/recipe-data.js"></script>
   <script src="js/recipes.js"></script>
   <script src="js/app.js"></script>
+  <script src="js/family-ui.js"></script>
 </body>
 </html>

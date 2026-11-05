@@ -79,6 +79,7 @@
     meta.appendChild(el('span', 'loc', loc.icon + ' ' + loc.label));
     if (it.expiry) meta.appendChild(el('span', null, '~ ' + it.expiry.slice(5).replace('-', '/')));
     if (it.quantity <= 0) meta.appendChild(el('span', 'out', '다 떨어짐'));
+    if (store.mode === 'family' && it.addedBy) meta.appendChild(el('span', 'by', it.addedBy));
     main.appendChild(meta);
     li.appendChild(main);
 
@@ -231,7 +232,7 @@
   function hideSheet() {
     els.backdrop.classList.remove('show');
     els.sheet.classList.remove('show');
-    if (!isOverlayOpen('recipes')) document.body.classList.remove('no-scroll');
+    if (overlays.length <= 1) document.body.classList.remove('no-scroll');
     if (document.activeElement) document.activeElement.blur();
     setTimeout(function () {
       if (!els.sheet.classList.contains('show')) {
@@ -379,15 +380,20 @@
     p.then(function () {
       closeSheet();
       toast(editing ? '수정했어요' : '“' + f.name + '” 추가했어요');
-    });
+    }, saveFailed);
+  }
+
+  // 가족 냉장고에 연결되기 전 등 저장할 수 없을 때
+  function saveFailed() {
+    toast('아직 가족 냉장고에 연결되지 않았어요. 잠시 후 다시 해 주세요');
   }
 
   function removeItem(id) {
     var item = findItem(id);
     if (!item) return;
     store.remove(id).then(function () {
-      toast('“' + item.name + '” 삭제했어요', '실행 취소', function () { store.add(item); });
-    });
+      toast('“' + item.name + '” 삭제했어요', '실행 취소', function () { store.add(item).catch(saveFailed); });
+    }, saveFailed);
   }
 
   function changeQty(id, delta) {
@@ -400,7 +406,7 @@
     if (!item) return;
     var next = Math.max(0, Math.round(value * 100) / 100);
     if (next === item.quantity) return;
-    store.update(id, { quantity: next });
+    store.update(id, { quantity: next }).catch(function () { saveFailed(); render(); });
     if (next === 0) toast('“' + item.name + '” 다 떨어졌어요', '삭제', function () { removeItem(id); });
   }
 
@@ -596,6 +602,16 @@
   document.addEventListener('visibilitychange', function () {
     if (!document.hidden) render();
   });
+
+  /* ---------- 다른 화면(가족 공유)에서 쓰는 도구 ---------- */
+
+  Fridge.ui = {
+    el: el,
+    toast: toast,
+    render: render,
+    openOverlay: openOverlay,
+    closeOverlay: closeOverlay
+  };
 
   /* ---------- 시작 ---------- */
 
