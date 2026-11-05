@@ -90,6 +90,23 @@
     })]);
   }
 
+  // Firestore 배치는 한 번에 500개까지라 200개씩 나눠서 차례로 보냄
+  // ops: [function (batch) { batch.set(...) }, ...]
+  var CHUNK = 200;
+  function commitInChunks(ops, timeout) {
+    var p = Promise.resolve();
+    for (var i = 0; i < ops.length; i += CHUNK) {
+      (function (chunk) {
+        p = p.then(function () {
+          var batch = fb.db.batch();
+          chunk.forEach(function (op) { op(batch); });
+          return timeout === false ? batch.commit() : withTimeout(batch.commit());
+        });
+      })(ops.slice(i, i + CHUNK));
+    }
+    return p;
+  }
+
   /* ---------- Firebase 불러오기 + 익명 로그인 ---------- */
 
   function loadScript(src) {
@@ -191,12 +208,14 @@
       },
       replaceAll: function (items) {
         return col.get().then(function (snap) {
-          var batch = fb.db.batch();
-          snap.docs.forEach(function (d) { batch.delete(d.ref); });
-          items.forEach(function (it) { batch.set(col.doc(it.id), clean(it)); });
-          return fireAndForget(batch.commit());
+          var ops = [];
+          snap.docs.forEach(function (d) { ops.push(function (b) { b.delete(d.ref); }); });
+          items.forEach(function (it) { ops.push(function (b) { b.set(col.doc(it.id), clean(it)); }); });
+          return fireAndForget(commitInChunks(ops, false));
         });
       },
+      // 이름만 바뀌었을 때 다시 연결하지 않고 이후 기록(addedBy/updatedBy)에 쓸 이름만 교체
+      setName: function (n) { name = n; },
       subscribe: function (cb) {
         return col.onSnapshot({ includeMetadataChanges: true }, function (snap) {
           last = toItems(snap);
@@ -220,21 +239,25 @@
     state.members = [];
   }
 
+  // 멤버 명단에서 빠짐(내보내짐) → 혼자 쓰기로 전환
+  function removed() {
+    detach();
+    info = null;
+    save(null);
+    store.use(store.local);
+    emitChange();
+    Fridge.family.onRemoved && Fridge.family.onRemoved();
+  }
+
   // 권한이 없다고 나오면: 내보내졌는지 확인
   function handleDenied(fid, e) {
-    if (!conn || conn.familyId !== fid || conn.checking) return;
+    if (!conn || conn.familyId !== fid || conn.checking || conn.leaving) return;
     conn.checking = true;
     familyRef(fid).collection('members').doc(fb.uid).get({ source: 'server' }).then(function (doc) {
       if (!conn || conn.familyId !== fid) return;
       conn.checking = false;
       if (doc.exists) { store.setStatus('error', e); return; }
-      // 멤버 명단에 없음 → 혼자 쓰기로 전환
-      detach();
-      info = null;
-      save(null);
-      store.use(store.local);
-      emitChange();
-      Fridge.family.onRemoved && Fridge.family.onRemoved();
+      removed();
     }, function () {
       if (conn) conn.checking = false;
       store.setStatus('error', e);
@@ -259,6 +282,13 @@
         emitChange();
       }, function (e) { if (e.code === 'permission-denied') denied(e); }));
 
+      // 내 멤버 문서: 관리자가 내보내도 이미 열린 실시간 연결은 권한 오류 없이 계속될 수 있어서
+      // 내 문서가 서버에서 지워졌는지 직접 지켜봄
+      c.unsubs.push(familyRef(fid).collection('members').doc(fb.uid).onSnapshot(function (doc) {
+        if (conn !== c || c.leaving || c.checking) return;
+        if (!doc.exists && !doc.metadata.fromCache) removed();
+      }, function (e) { if (e.code === 'permission-denied') denied(e); }));
+
       // 멤버 명단
       c.unsubs.push(familyRef(fid).collection('members').onSnapshot(function (snap) {
         if (conn !== c) return;
@@ -279,22 +309,15 @@
   function uploadItems(fid, items, name) {
     if (!items.length) return Promise.resolve();
     var col = familyRef(fid).collection('items');
-    var chunks = [];
-    for (var i = 0; i < items.length; i += 200) chunks.push(items.slice(i, i + 200));
-    return chunks.reduce(function (p, chunk) {
-      return p.then(function () {
-        var batch = fb.db.batch();
-        chunk.forEach(function (it) {
-          var data = {
-            id: it.id, name: String(it.name).slice(0, 40), quantity: it.quantity, unit: String(it.unit || '').slice(0, 10),
-            location: it.location, expiry: it.expiry || null, createdAt: it.createdAt, updatedAt: it.updatedAt
-          };
-          if (name) data.addedBy = name;
-          batch.set(col.doc(it.id), data);
-        });
-        return withTimeout(batch.commit());
-      });
-    }, Promise.resolve());
+    var I = Fridge.ingredients;
+    return commitInChunks(items.map(function (it) {
+      var data = {
+        id: it.id, name: String(it.name).slice(0, 40), quantity: I.clampQty(it.quantity), unit: String(it.unit || '').slice(0, 10),
+        location: it.location, expiry: it.expiry || null, createdAt: it.createdAt, updatedAt: it.updatedAt
+      };
+      if (name) data.addedBy = name;
+      return function (b) { b.set(col.doc(it.id), data); };
+    }));
   }
 
   /* ---------- 만들기 / 참여 / 코드 바꾸기 / 내보내기 / 나가기 ---------- */
@@ -345,7 +368,9 @@
       if (!mergeLocal) return null;
       return store.local.list().then(function (items) { return uploadItems(fid, items, name); });
     }).then(function () {
+      // 합치지 않은 이 기기 재료는 나중에 그만둘 때 지우지 않고 남겨 둠
       info = { familyId: fid, name: name };
+      if (!mergeLocal) info.keepLocal = true;
       save(info);
       return connect(fid, name);
     });
@@ -368,50 +393,86 @@
   function kick(uid) {
     if (!conn || !isOwner()) return Promise.reject(err('not-owner'));
     if (uid === fb.uid) return Promise.reject(err('self'));
-    return withTimeout(familyRef(conn.familyId).collection('members').doc(uid).delete())
-      .then(rotateCode);
+    var fid = conn.familyId;
+    // 코드를 먼저 바꿔야, 내보낸 뒤 코드 변경이 실패해도 옛 코드로 다시 들어올 수 없음
+    return rotateCode().then(function () {
+      return withTimeout(familyRef(fid).collection('members').doc(uid).delete());
+    });
   }
 
   // 나가기: 관리자면 다른 멤버에게 넘기고, 마지막 멤버면 가족 데이터를 지움.
-  // 보던 목록은 이 기기에 복사해 둠
+  // 보던 목록은 이 기기에 복사해 둠.
+  // 화면에 보이는 멤버 명단은 아직 안 왔을 수 있으므로, 판단은 항상 서버에서 새로 받은 값으로 함
   function leave() {
     if (!conn || !fb) {
       detach(); info = null; save(null);
       return store.use(store.local).then(emitChange);
     }
-    var fid = conn.familyId;
-    var items = conn.adapter ? conn.adapter.last.slice() : [];
-    var others = state.members.filter(function (m) { return m.uid !== fb.uid; });
-    var steps = Promise.resolve();
+    var c = conn;
+    var fid = c.familyId;
+    var fam = familyRef(fid);
+    var col = fam.collection('items');
+    var me = fam.collection('members').doc(fb.uid);
+    var items = [];
+    var keepLocal = !!(info && info.keepLocal);
 
-    if (isOwner() && others.length) {
-      steps = steps.then(function () { return withTimeout(familyRef(fid).update({ ownerUid: others[0].uid })); });
-    } else if (!others.length) {
-      // 마지막 멤버: 재료와 초대 코드 삭제
-      steps = steps.then(function () {
-        return familyRef(fid).collection('items').get().then(function (snap) {
-          var batch = fb.db.batch();
-          snap.docs.forEach(function (d) { batch.delete(d.ref); });
-          if (state.code && isOwner()) batch.delete(inviteRef(state.code));
-          return withTimeout(batch.commit());
-        });
-      });
-    }
-    return steps.then(function () {
-      return withTimeout(familyRef(fid).collection('members').doc(fb.uid).delete());
+    return withTimeout(Promise.all([
+      fam.collection('members').get({ source: 'server' }),
+      fam.get({ source: 'server' }),
+      col.get({ source: 'server' })
+    ])).then(function (r) {
+      var others = r[0].docs
+        .filter(function (d) { return d.id !== fb.uid; })
+        .map(function (d) { return { uid: d.id, joinedAt: d.data().joinedAt || 0 }; })
+        .sort(function (a, b) { return a.joinedAt - b.joinedAt; });
+      var famData = r[1].exists ? r[1].data() : {};
+      var owner = famData.ownerUid === fb.uid;
+      items = r[2].docs.map(function (d) { return d.data(); });
+
+      // 이제부터 생기는 권한 오류는 내가 나가서 생기는 것이므로 무시
+      c.leaving = true;
+      if (owner && others.length) {
+        return withTimeout(fam.update({ ownerUid: others[0].uid }));
+      }
+      if (!others.length) {
+        // 정말 마지막 멤버일 때만: 재료와 초대 코드 삭제
+        var ops = r[2].docs.map(function (d) { return function (b) { b.delete(d.ref); }; });
+        if (owner && famData.code) ops.push(function (b) { b.delete(inviteRef(famData.code)); });
+        return commitInChunks(ops);
+      }
+    }).then(function () {
+      c.unsubs.forEach(function (u) { try { u(); } catch (e) { /* 무시 */ } });
+      c.unsubs = [];
+      return withTimeout(me.delete());
     }).then(function () {
       detach();
       info = null;
       save(null);
-      return store.local.replaceAll(items.map(function (it) {
-        var c = Object.assign({}, it);
-        delete c.addedBy;
-        delete c.updatedBy;
-        return c;
-      }));
+      return store.local.list();
+    }).then(function (localItems) {
+      var copy = items.map(function (it) {
+        var x = Object.assign({}, it);
+        delete x.addedBy;
+        delete x.updatedBy;
+        return x;
+      });
+      if (keepLocal) {
+        // 참여할 때 합치지 않았던 이 기기 재료는 그대로 두고, 가족 목록을 더함(같은 id면 가족 쪽)
+        var ids = {};
+        copy.forEach(function (it) { ids[it.id] = true; });
+        copy = localItems.filter(function (it) { return !ids[it.id]; }).concat(copy);
+      }
+      return store.local.replaceAll(copy);
     }).then(function () {
       return store.use(store.local);
-    }).then(emitChange);
+    }).then(emitChange, function (e) {
+      if (conn === c) {
+        c.leaving = false;
+        // 실시간 연결을 이미 끊은 뒤 실패했다면 다시 연결
+        if (!c.unsubs.length) connect(fid, c.name).catch(function () {});
+      }
+      throw e;
+    });
   }
 
   function setName(rawName) {
@@ -420,8 +481,8 @@
     info.name = name;
     save(info);
     conn.name = name;
-    return withTimeout(familyRef(conn.familyId).collection('members').doc(fb.uid).update({ name: name }))
-      .then(function () { return connect(info.familyId, name); });
+    if (conn.adapter && conn.adapter.setName) conn.adapter.setName(name);
+    return withTimeout(familyRef(conn.familyId).collection('members').doc(fb.uid).update({ name: name }));
   }
 
   function retry() {
