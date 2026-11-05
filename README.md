@@ -1,4 +1,4 @@
-# 🧊 우리집 냉장고
+# 🧊 My Refrigerator
 
 냉장고 재료와 유통기한을 관리하는 웹앱입니다. HTML · CSS · JavaScript만 사용했고 설치나 빌드가 필요 없습니다.
 
