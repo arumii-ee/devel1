@@ -6,9 +6,15 @@
   <meta name="theme-color" content="#2f7d6d" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#14201d" media="(prefers-color-scheme: dark)">
   <meta name="description" content="냉장고 재료와 유통기한을 관리하는 앱">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com http://127.0.0.1:* http://localhost:*; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
   <title>우리집 냉장고</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="icon" href="icons/favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="냉장고">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -23,6 +29,13 @@
           </button>
           <button type="button" class="recipe-btn" id="recipeBtn">레시피</button>
         </div>
+      </div>
+      <div class="install-bar" id="installBar" hidden>
+        <button type="button" class="install-main" id="installBtn">
+          <img src="icons/icon-192.png" alt="" width="28" height="28">
+          <span><b>앱으로 설치하기</b><small>홈 화면 아이콘으로 바로 열려요</small></span>
+        </button>
+        <button type="button" class="install-close" id="installClose" aria-label="설치 안내 닫기">✕</button>
       </div>
       <button type="button" class="sync-line" id="syncLine" hidden></button>
       <button type="button" class="alert-banner" id="alertBanner" hidden></button>
@@ -143,5 +156,6 @@
   <script src="js/recipes.js"></script>
   <script src="js/app.js"></script>
   <script src="js/family-ui.js"></script>
+  <script src="js/pwa.js"></script>
 </body>
 </html>

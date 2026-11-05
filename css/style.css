@@ -536,9 +536,10 @@ main { padding: 12px 16px; }
 .fam-label { margin: 0; color: var(--muted); font-size: 14px; }
 .fam-code {
   margin: 4px 0 14px;
-  font-size: 34px;
+  font-size: clamp(20px, 7vw, 30px);
   font-weight: 800;
-  letter-spacing: .08em;
+  letter-spacing: .04em;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
   font-family: ui-monospace, "Cascadia Mono", Consolas, "Roboto Mono", monospace;
 }
@@ -578,10 +579,69 @@ main { padding: 12px 16px; }
   border-radius: 12px;
   background: var(--bg);
   text-align: center;
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 700;
-  letter-spacing: .1em;
+  letter-spacing: .06em;
   text-transform: uppercase;
   outline: none;
 }
-.panel .btn.danger { margin-top: 24px; }
+.panel .btn.danger.block { margin-top: 24px; }
+
+/* ===== 앱 설치 안내 ===== */
+.install-bar {
+  display: flex;
+  align-items: stretch;
+  margin-top: 10px;
+  border-radius: 12px;
+  background: var(--primary-soft);
+  overflow: hidden;
+}
+.install-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 8px 12px;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+.install-main img { border-radius: 7px; flex-shrink: 0; }
+.install-main b { display: block; font-size: 15px; color: var(--primary); }
+.install-main small { display: block; font-size: 12px; color: var(--muted); }
+.install-close {
+  width: 48px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 16px;
+}
+
+/* 앱으로 실행 중일 때: 당겨서 새로고침 방지 */
+@media (display-mode: standalone) {
+  html, body { overscroll-behavior-y: contain; }
+}
+
+/* 가족 멤버 명단 */
+.members { list-style: none; margin: 8px 0 0; padding: 0; }
+.member {
+  display: flex; align-items: center; gap: 6px;
+  min-height: 48px;
+  border-bottom: 1px solid var(--line);
+}
+.member:last-child { border-bottom: 0; }
+.member-name { font-weight: 600; margin-right: 2px; }
+.tag {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.tag.me { background: var(--primary-soft); color: var(--primary); }
+.member .btn { margin-left: auto; }
+.btn.small { height: 36px; padding: 0 12px; font-size: 14px; }
+.btn.mt { margin-top: 10px; }
+.muted { color: var(--muted); }
