@@ -1,17 +1,104 @@
 rules_version = '2';
 // 우리집 냉장고 - 가족 공유 보안 규칙
-// 가족 코드(8자리)를 아는 사람만 그 가족의 재료를 읽고 쓸 수 있고,
-// 다른 가족 목록을 둘러보는 것(list)은 막습니다.
+// ---------------------------------------------------------------
+// - 모든 접근은 로그인(익명 로그인)이 필요합니다.
+// - 가족 냉장고의 재료는 "멤버 명단"에 있는 기기만 읽고 쓸 수 있습니다.
+// - 멤버가 되려면 현재 유효한 가족 코드(12자리)를 알아야 합니다.
+// - 관리자(만든 사람)는 멤버를 내보내고 코드를 바꿀 수 있습니다.
+// - 저장되는 데이터는 칸 이름·종류·길이를 엄격하게 검사합니다.
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /families/{code} {
-      allow get, create: if code.size() == 8;
+
+    function signedIn() {
+      return request.auth != null;
+    }
+    function familyPath(fid) {
+      return /databases/$(database)/documents/families/$(fid);
+    }
+    function family(fid) {
+      return get(familyPath(fid)).data;
+    }
+    function isMember(fid) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/families/$(fid)/members/$(request.auth.uid));
+    }
+    function isOwner(fid) {
+      return signedIn() && exists(familyPath(fid))
+        && family(fid).ownerUid == request.auth.uid;
+    }
+    // 헷갈리는 글자(I, L, O, 0, 1)를 뺀 12자리
+    function validCode(c) {
+      return c is string && c.matches('^[ABCDEFGHJKMNPQRSTUVWXYZ2-9]{12}$');
+    }
+    function validName(n) {
+      return n is string && n.size() <= 10;
+    }
+    function optionalName(d, key) {
+      return !(key in d) || validName(d[key]);
+    }
+    function validItem(d, itemId) {
+      return d.keys().hasAll(['id', 'name', 'quantity', 'unit', 'location', 'expiry', 'createdAt', 'updatedAt'])
+        && d.keys().hasOnly(['id', 'name', 'quantity', 'unit', 'location', 'expiry', 'createdAt', 'updatedAt', 'addedBy', 'updatedBy'])
+        && d.id == itemId
+        && d.name is string && d.name.size() > 0 && d.name.size() <= 40
+        && d.quantity is number && d.quantity >= 0 && d.quantity <= 100000
+        && d.unit is string && d.unit.size() <= 10
+        && d.location in ['fridge', 'freezer', 'pantry']
+        && (d.expiry == null || (d.expiry is string && d.expiry.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')))
+        && d.createdAt is number && d.updatedAt is number
+        && optionalName(d, 'addedBy') && optionalName(d, 'updatedBy');
+    }
+
+    // 초대 코드 → 가족 찾기. 코드를 정확히 알아야만 읽을 수 있고, 목록 보기는 불가
+    match /invites/{code} {
+      allow get: if signedIn();
+      allow list, update: if false;
+      allow create: if signedIn() && validCode(code)
+        && request.resource.data.keys().hasOnly(['familyId', 'createdAt'])
+        && request.resource.data.familyId is string
+        && request.resource.data.createdAt is number
+        && isOwner(request.resource.data.familyId)
+        && family(request.resource.data.familyId).code == code;
+      allow delete: if signedIn() && isOwner(resource.data.familyId);
+    }
+
+    match /families/{fid} {
+      allow get: if isMember(fid);
+      allow list, delete: if false;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['ownerUid', 'code', 'createdAt'])
+        && request.resource.data.ownerUid == request.auth.uid
+        && validCode(request.resource.data.code)
+        && request.resource.data.createdAt is number;
+      // 관리자만: 코드 바꾸기, 또는 다른 멤버에게 관리자 넘기기
+      allow update: if isOwner(fid) && (
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['code'])
+          && validCode(request.resource.data.code))
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ownerUid'])
+          && exists(/databases/$(database)/documents/families/$(fid)/members/$(request.resource.data.ownerUid)))
+      );
+
+      match /members/{uid} {
+        allow get: if signedIn() && (request.auth.uid == uid || isMember(fid));
+        allow list: if isMember(fid);
+        // 본인만, 현재 유효한 가족 코드를 제시해야 가입
+        allow create: if signedIn() && request.auth.uid == uid
+          && exists(familyPath(fid))
+          && request.resource.data.keys().hasOnly(['name', 'joinedAt', 'code'])
+          && validName(request.resource.data.name)
+          && request.resource.data.joinedAt is number
+          && request.resource.data.code == family(fid).code;
+        // 본인 이름만 수정
+        allow update: if signedIn() && request.auth.uid == uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name'])
+          && validName(request.resource.data.name);
+        // 본인 탈퇴, 또는 관리자가 내보내기
+        allow delete: if signedIn() && (request.auth.uid == uid || isOwner(fid));
+      }
 
       match /items/{itemId} {
-        allow read, delete: if code.size() == 8;
-        allow create, update: if code.size() == 8
-          && request.resource.data.name is string
-          && request.resource.data.name.size() <= 40;
+        allow read, delete: if isMember(fid);
+        allow create, update: if isMember(fid) && validItem(request.resource.data, itemId);
       }
     }
   }
