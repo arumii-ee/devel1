@@ -1,0 +1,14 @@
+{
+  "name": "우리집 냉장고",
+  "short_name": "냉장고",
+  "description": "냉장고 재료와 유통기한 관리",
+  "lang": "ko",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f7f6",
+  "theme_color": "#2f7d6d",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

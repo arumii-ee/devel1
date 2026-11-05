@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2f7d6d" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#14201d" media="(prefers-color-scheme: dark)">
+  <meta name="description" content="냉장고 재료와 유통기한을 관리하는 앱">
+  <title>우리집 냉장고</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="top">
+      <div class="top-row">
+        <h1>🧊 우리집 냉장고</h1>
+        <span class="count" id="totalCount">0개</span>
+      </div>
+      <button type="button" class="alert-banner" id="alertBanner" hidden></button>
+      <input type="search" id="search" class="search" placeholder="재료 검색" autocomplete="off" aria-label="재료 검색">
+      <nav class="tabs" role="tablist" aria-label="보관 위치">
+        <button type="button" role="tab" class="tab is-active" data-filter="all" aria-selected="true">전체 <b data-count="all">0</b></button>
+        <button type="button" role="tab" class="tab" data-filter="fridge" aria-selected="false">❄️ 냉장 <b data-count="fridge">0</b></button>
+        <button type="button" role="tab" class="tab" data-filter="freezer" aria-selected="false">🧊 냉동 <b data-count="freezer">0</b></button>
+        <button type="button" role="tab" class="tab" data-filter="pantry" aria-selected="false">🏠 실온 <b data-count="pantry">0</b></button>
+      </nav>
+    </header>
+
+    <main>
+      <ul class="list" id="list" aria-live="polite"></ul>
+      <div class="empty" id="empty" hidden>
+        <div class="empty-icon">🥕</div>
+        <p id="emptyText">아직 등록된 재료가 없어요.<br>아래 <b>+</b> 버튼으로 추가해 보세요.</p>
+      </div>
+    </main>
+
+    <button type="button" class="fab" id="addBtn" aria-label="재료 추가">+</button>
+  </div>
+
+  <!-- 추가/수정 바텀시트 -->
+  <div class="sheet-backdrop" id="backdrop" hidden></div>
+  <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" hidden>
+    <div class="sheet-handle"></div>
+    <form id="form" novalidate>
+      <h2 id="sheetTitle">재료 추가</h2>
+
+      <label class="field">
+        <span>재료 이름 <em>*</em></span>
+        <input type="text" name="name" id="fName" maxlength="40" placeholder="예: 우유, 계란" autocomplete="off" enterkeyhint="next" required>
+        <small class="error" id="nameError" hidden>재료 이름을 입력해 주세요.</small>
+      </label>
+
+      <div class="field">
+        <span>수량</span>
+        <div class="qty-row">
+          <button type="button" class="step" data-step="-1" aria-label="수량 줄이기">−</button>
+          <input type="number" name="quantity" id="fQty" min="0" step="any" inputmode="decimal" value="1" aria-label="수량">
+          <button type="button" class="step" data-step="1" aria-label="수량 늘리기">+</button>
+          <input type="text" name="unit" id="fUnit" list="units" maxlength="10" placeholder="단위" aria-label="단위">
+          <datalist id="units">
+            <option value="개"><option value="g"><option value="kg"><option value="ml"><option value="L">
+            <option value="팩"><option value="봉"><option value="병"><option value="캔"><option value="줄"><option value="모">
+          </datalist>
+        </div>
+      </div>
+
+      <fieldset class="field">
+        <legend>보관 위치</legend>
+        <div class="segment">
+          <label><input type="radio" name="location" value="fridge" checked><span>❄️ 냉장</span></label>
+          <label><input type="radio" name="location" value="freezer"><span>🧊 냉동</span></label>
+          <label><input type="radio" name="location" value="pantry"><span>🏠 실온</span></label>
+        </div>
+      </fieldset>
+
+      <div class="field">
+        <span>유통기한 <small>(선택)</small></span>
+        <input type="date" name="expiry" id="fExpiry" aria-label="유통기한">
+        <div class="chips">
+          <button type="button" class="chip" data-days="1">+1일</button>
+          <button type="button" class="chip" data-days="3">+3일</button>
+          <button type="button" class="chip" data-days="7">+1주</button>
+          <button type="button" class="chip" data-days="30">+1달</button>
+          <button type="button" class="chip" data-days="">없음</button>
+        </div>
+      </div>
+
+      <div class="sheet-actions">
+        <button type="button" class="btn danger" id="deleteBtn" hidden>삭제</button>
+        <button type="button" class="btn ghost" id="cancelBtn">취소</button>
+        <button type="submit" class="btn primary" id="saveBtn">저장</button>
+      </div>
+    </form>
+  </section>
+
+  <div class="toast" id="toast" role="status" hidden>
+    <span id="toastText"></span>
+    <button type="button" id="toastAction" hidden>실행 취소</button>
+  </div>
+
+  <script src="js/storage.js"></script>
+  <script src="js/ingredients.js"></script>
+  <script src="js/recipes.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
