@@ -75,7 +75,18 @@
     plus.type = 'button';
     plus.dataset.action = 'inc';
     plus.setAttribute('aria-label', it.name + ' 수량 늘리기');
-    var val = el('span', 'qval', I.formatQty(it.quantity) + (it.unit ? it.unit : ''));
+    // 수량을 누르면 숫자 키패드로 바로 입력
+    var val = el('label', 'qval');
+    var input = el('input', 'qinput');
+    input.type = 'number';
+    input.inputMode = 'decimal';
+    input.min = '0';
+    input.step = 'any';
+    input.setAttribute('enterkeyhint', 'done');
+    input.value = I.formatQty(it.quantity);
+    input.setAttribute('aria-label', it.name + ' 수량');
+    val.appendChild(input);
+    if (it.unit) val.appendChild(el('span', 'qunit', it.unit));
     qty.appendChild(minus);
     qty.appendChild(val);
     qty.appendChild(plus);
@@ -83,7 +94,16 @@
     return li;
   }
 
+  // 목록의 수량 칸을 입력 중이면 다시 그리지 않고 입력이 끝난 뒤 그림
+  var renderPending = false;
+  function isEditingQty() {
+    var a = document.activeElement;
+    return !!(a && a.classList && a.classList.contains('qinput'));
+  }
+
   function render() {
+    if (isEditingQty()) { renderPending = true; return; }
+    renderPending = false;
     var items = visibleItems();
     els.list.textContent = '';
     var frag = document.createDocumentFragment();
@@ -254,8 +274,13 @@
 
   function changeQty(id, delta) {
     var item = findItem(id);
+    if (item) setQty(id, item.quantity + delta);
+  }
+
+  function setQty(id, value) {
+    var item = findItem(id);
     if (!item) return;
-    var next = Math.max(0, Math.round((item.quantity + delta) * 100) / 100);
+    var next = Math.max(0, Math.round(value * 100) / 100);
     if (next === item.quantity) return;
     store.update(id, { quantity: next });
     if (next === 0) toast('“' + item.name + '” 다 떨어졌어요', '삭제', function () { removeItem(id); });
@@ -299,6 +324,29 @@
     if (action === 'edit') openSheet(findItem(id));
     else if (action === 'inc') changeQty(id, 1);
     else if (action === 'dec') changeQty(id, -1);
+  });
+
+  // 수량 칸: 누르면 전체 선택 → 새 숫자 입력 → 완료(Enter) 또는 다른 곳 누르면 저장
+  els.list.addEventListener('focusin', function (e) {
+    if (e.target.classList.contains('qinput')) e.target.select();
+  });
+  els.list.addEventListener('keydown', function (e) {
+    if (e.target.classList.contains('qinput') && e.key === 'Enter') {
+      e.preventDefault();
+      e.target.blur();
+    }
+  });
+  els.list.addEventListener('focusout', function (e) {
+    var input = e.target;
+    if (!input.classList.contains('qinput')) return;
+    var id = input.closest('.card').dataset.id;
+    var item = findItem(id);
+    var v = parseFloat(input.value);
+    // focusout 이 끝난 뒤(포커스가 빠진 상태에서) 저장·다시 그리기
+    setTimeout(function () {
+      if (item && isFinite(v) && v >= 0) setQty(id, v);
+      if (renderPending || !item || !(isFinite(v) && v >= 0)) render(); // 잘못된 값이면 원래 값으로 복구
+    }, 0);
   });
 
   document.querySelector('.tabs').addEventListener('click', function (e) {
