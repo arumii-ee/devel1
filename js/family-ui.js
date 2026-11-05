@@ -55,7 +55,7 @@
     els.line.hidden = !shared;
     if (shared) {
       els.line.className = 'sync-line is-' + s;
-      els.line.textContent = '가족 냉장고' + (F.state.code ? ' ' + F.formatCode(F.state.code) : '') + ' · ' + (STATUS_TEXT[s] || '');
+      els.line.textContent = '가족 냉장고 · ' + (STATUS_TEXT[s] || '');
     }
     // 입력 중이면 다시 그리지 않음(입력 내용이 사라지지 않게)
     var a = document.activeElement;
@@ -87,10 +87,10 @@
 
   function shareCode() {
     var code = F.formatCode(F.state.code);
-    var text = '우리집 냉장고 가족 코드: ' + code + '\n앱을 열고 [가족 공유 → 가족 코드로 참여]에 입력하세요.';
+    var text = 'My Refrigerator 가족 코드: ' + code + '\n앱을 열고 [가족 공유 → 가족 코드로 참여]에 입력하세요.';
     if (/^https?:/.test(location.href)) text += '\n' + location.href.split('#')[0];
     if (navigator.share) {
-      navigator.share({ title: '우리집 냉장고', text: text }).catch(function () { /* 취소 */ });
+      navigator.share({ title: 'My Refrigerator', text: text }).catch(function () { /* 취소 */ });
     } else {
       copyText(text).then(function () { ui.toast('초대 문구를 복사했어요. 메신저에 붙여 넣으세요'); },
         function () { ui.toast('복사하지 못했어요. 코드를 직접 알려 주세요'); });
