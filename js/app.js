@@ -17,11 +17,13 @@
   var $ = function (id) { return document.getElementById(id); };
   var els = {
     list: $('list'), empty: $('empty'), emptyText: $('emptyText'),
-    total: $('totalCount'), banner: $('alertBanner'), search: $('search'),
+    banner: $('alertBanner'), search: $('search'),
     addBtn: $('addBtn'), sheet: $('sheet'), backdrop: $('backdrop'),
     form: $('form'), title: $('sheetTitle'), name: $('fName'), nameError: $('nameError'),
     qty: $('fQty'), unit: $('fUnit'), expiry: $('fExpiry'),
     deleteBtn: $('deleteBtn'), cancelBtn: $('cancelBtn'),
+    recipeBtn: $('recipeBtn'), recipePanel: $('recipePanel'), recipeBack: $('recipeBack'),
+    recipeBody: $('recipeBody'), recipeSub: $('recipeSub'),
     toast: $('toast'), toastText: $('toastText'), toastAction: $('toastAction')
   };
 
@@ -46,8 +48,22 @@
   function renderItem(it) {
     var st = I.status(it);
     var loc = I.LOCATIONS[it.location];
-    var li = el('li', 'card status-' + st + (it.quantity <= 0 ? ' is-out' : ''));
-    li.dataset.id = it.id;
+    // 줄(row) = 뒤에 깔린 휴지통 + 위에 놓인 카드. 카드를 밀면 휴지통이 드러남
+    var row = el('li', 'row');
+    row.dataset.id = it.id;
+    var bg = el('div', 'swipe-bg');
+    ['left', 'right'].forEach(function (side) {
+      var t = el('button', 'trash trash-' + side);
+      t.type = 'button';
+      t.dataset.action = 'delete';
+      t.tabIndex = -1;
+      t.setAttribute('aria-label', it.name + ' 삭제');
+      t.innerHTML = TRASH_SVG + '<span>삭제</span>';
+      bg.appendChild(t);
+    });
+    row.appendChild(bg);
+
+    var li = el('div', 'card status-' + st + (it.quantity <= 0 ? ' is-out' : ''));
 
     var main = el('button', 'card-main');
     main.type = 'button';
@@ -91,8 +107,11 @@
     qty.appendChild(val);
     qty.appendChild(plus);
     li.appendChild(qty);
-    return li;
+    row.appendChild(li);
+    return row;
   }
+
+  var TRASH_SVG = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
   // 목록의 수량 칸을 입력 중이면 다시 그리지 않고 입력이 끝난 뒤 그림
   var renderPending = false;
@@ -105,6 +124,7 @@
     if (isEditingQty()) { renderPending = true; return; }
     renderPending = false;
     var items = visibleItems();
+    openRow = null;
     els.list.textContent = '';
     var frag = document.createDocumentFragment();
     items.forEach(function (it) { frag.appendChild(renderItem(it)); });
@@ -123,7 +143,6 @@
     document.querySelectorAll('[data-count]').forEach(function (b) {
       b.textContent = counts[b.dataset.count] || 0;
     });
-    els.total.textContent = state.items.length + '개';
 
     // 임박 알림 배너
     var parts = [];
@@ -149,7 +168,41 @@
 
   /* ---------- 바텀시트 ---------- */
 
-  var sheetInHistory = false;
+  /*
+   * 겹쳐 뜨는 화면(입력 시트, 레시피 화면) 관리.
+   * 열 때 방문 기록을 하나 추가해서, 안드로이드 뒤로가기를 누르면
+   * 앱이 꺼지지 않고 맨 위 화면만 닫히게 합니다.
+   */
+  var overlays = [];
+
+  function isOverlayOpen(name) {
+    return overlays.some(function (o) { return o.name === name; });
+  }
+
+  function openOverlay(name, hide) {
+    if (isOverlayOpen(name)) return;
+    var pushed = false;
+    try { history.pushState({ overlay: name }, ''); pushed = true; } catch (e) { /* 무시 */ }
+    overlays.push({ name: name, hide: hide, pushed: pushed });
+  }
+
+  // 버튼으로 닫을 때: 추가했던 기록을 되돌리면 popstate 에서 닫힘
+  function closeOverlay(name) {
+    var top = overlays[overlays.length - 1];
+    if (!top || top.name !== name) return;
+    if (top.pushed) {
+      history.back();
+    } else {
+      overlays.pop();
+      top.hide();
+    }
+  }
+
+  window.addEventListener('popstate', function () {
+    var top = overlays.pop();
+    if (top) top.hide();
+  });
+
 
   function openSheet(item) {
     state.editingId = item ? item.id : null;
@@ -172,16 +225,13 @@
     document.body.classList.add('no-scroll');
     if (!item) setTimeout(function () { els.name.focus(); }, 250);
 
-    // 안드로이드 뒤로가기 버튼으로 시트만 닫히도록 기록 추가
-    if (!sheetInHistory) {
-      try { history.pushState({ sheet: true }, ''); sheetInHistory = true; } catch (e) { /* 무시 */ }
-    }
+    openOverlay('sheet', hideSheet);
   }
 
   function hideSheet() {
     els.backdrop.classList.remove('show');
     els.sheet.classList.remove('show');
-    document.body.classList.remove('no-scroll');
+    if (!isOverlayOpen('recipes')) document.body.classList.remove('no-scroll');
     if (document.activeElement) document.activeElement.blur();
     setTimeout(function () {
       if (!els.sheet.classList.contains('show')) {
@@ -192,23 +242,91 @@
     state.editingId = null;
   }
 
-  // 버튼으로 닫을 때: 추가했던 기록을 되돌리면 popstate 에서 닫힘
-  function closeSheet() {
-    if (sheetInHistory) {
-      history.back();
-    } else {
-      hideSheet();
-    }
+  function closeSheet() { closeOverlay('sheet'); }
+
+  /* ---------- 추천 레시피 화면 ---------- */
+
+  function openRecipes() {
+    renderRecipes();
+    els.recipePanel.hidden = false;
+    els.recipePanel.scrollTop = 0;
+    requestAnimationFrame(function () { els.recipePanel.classList.add('show'); });
+    document.body.classList.add('no-scroll');
+    openOverlay('recipes', hideRecipes);
   }
 
-  window.addEventListener('popstate', function () {
-    if (sheetInHistory) {
-      sheetInHistory = false;
-      hideSheet();
-    }
-  });
+  function hideRecipes() {
+    els.recipePanel.classList.remove('show');
+    document.body.classList.remove('no-scroll');
+    setTimeout(function () {
+      if (!els.recipePanel.classList.contains('show')) els.recipePanel.hidden = true;
+    }, 220);
+  }
 
-  function isSheetOpen() { return !els.sheet.hidden && els.sheet.classList.contains('show'); }
+  function chip(text, cls) {
+    return el('span', 'rchip' + (cls ? ' ' + cls : ''), text);
+  }
+
+  function renderRecipeCard(r) {
+    var card = el('details', 'recipe');
+    var sum = el('summary');
+    var head = el('div', 'recipe-head');
+    head.appendChild(el('span', 'recipe-title', r.recipe.title));
+    head.appendChild(el('span', 'recipe-time', r.recipe.time));
+    sum.appendChild(head);
+    if (r.urgent) sum.appendChild(el('div', 'recipe-urgent', '유통기한 급한 재료 ' + r.urgent + '개 사용'));
+
+    var chips = el('div', 'recipe-chips');
+    r.have.concat(r.extra).forEach(function (h) {
+      var st = I.status(h.item);
+      chips.appendChild(chip(h.item.name, 'have st-' + st));
+    });
+    r.missing.forEach(function (name) { chips.appendChild(chip(name + ' 없음', 'missing')); });
+    sum.appendChild(chips);
+    card.appendChild(sum);
+
+    var body = el('div', 'recipe-body');
+    var opt = r.recipe.optional.filter(function (n) {
+      return !r.extra.some(function (x) { return x.name === n; });
+    });
+    if (opt.length) body.appendChild(el('p', 'recipe-note', '있으면 좋아요: ' + opt.join(', ')));
+    if (r.recipe.sauce.length) body.appendChild(el('p', 'recipe-note', '기본 양념: ' + r.recipe.sauce.join(', ')));
+    var ol = el('ol', 'recipe-steps');
+    r.recipe.steps.forEach(function (st) { ol.appendChild(el('li', null, st)); });
+    body.appendChild(ol);
+    card.appendChild(body);
+    return card;
+  }
+
+  function renderRecipes() {
+    var stock = state.items.filter(function (it) { return it.quantity > 0; });
+    Fridge.recipes.recommend(state.items).then(function (list) {
+      var body = els.recipeBody;
+      body.textContent = '';
+      els.recipeSub.textContent = '가진 재료 ' + stock.length + '개 · 유통기한 급한 재료 먼저';
+      if (!list.length) {
+        var empty = el('div', 'empty');
+        empty.appendChild(el('div', 'empty-icon', '🍳'));
+        empty.appendChild(el('p', null, stock.length
+          ? '지금 재료로 맞는 레시피를 찾지 못했어요. 재료를 더 등록해 보세요.'
+          : '재료를 등록하면 만들 수 있는 요리를 추천해 드려요.'));
+        body.appendChild(empty);
+        return;
+      }
+      var groups = [
+        { title: '바로 만들 수 있어요', items: list.filter(function (r) { return !r.missing.length; }) },
+        { title: '재료 1~2가지만 더 있으면', items: list.filter(function (r) { return r.missing.length; }) }
+      ];
+      groups.forEach(function (g) {
+        if (!g.items.length) return;
+        var h = el('h3', 'recipe-group', g.title + ' ');
+        h.appendChild(el('b', null, String(g.items.length)));
+        body.appendChild(h);
+        g.items.forEach(function (r) { body.appendChild(renderRecipeCard(r)); });
+      });
+    });
+  }
+
 
   /* ---------- 토스트 ---------- */
 
@@ -319,9 +437,10 @@
   els.list.addEventListener('click', function (e) {
     var btn = e.target.closest('[data-action]');
     if (!btn) return;
-    var id = btn.closest('.card').dataset.id;
+    var id = btn.closest('.row').dataset.id;
     var action = btn.dataset.action;
-    if (action === 'edit') openSheet(findItem(id));
+    if (action === 'delete') removeItem(id);
+    else if (action === 'edit') openSheet(findItem(id));
     else if (action === 'inc') changeQty(id, 1);
     else if (action === 'dec') changeQty(id, -1);
   });
@@ -339,7 +458,7 @@
   els.list.addEventListener('focusout', function (e) {
     var input = e.target;
     if (!input.classList.contains('qinput')) return;
-    var id = input.closest('.card').dataset.id;
+    var id = input.closest('.row').dataset.id;
     var item = findItem(id);
     var v = parseFloat(input.value);
     // focusout 이 끝난 뒤(포커스가 빠진 상태에서) 저장·다시 그리기
@@ -376,7 +495,101 @@
   });
 
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && isSheetOpen()) closeSheet();
+    if (e.key === 'Escape' && overlays.length) closeOverlay(overlays[overlays.length - 1].name);
+  });
+
+  els.recipeBtn.addEventListener('click', openRecipes);
+  els.recipeBack.addEventListener('click', function () { closeOverlay('recipes'); });
+
+  /* ---------- 밀어서 삭제 ---------- */
+  // 카드를 왼쪽이나 오른쪽으로 밀면 휴지통이 나오고, 누르면 삭제(실행 취소 가능)
+
+  var OPEN = 84;          // 열렸을 때 밀린 거리(px)
+  var openRow = null;     // 지금 열려 있는 줄
+  var swipe = null;       // 밀고 있는 중의 정보
+  var suppressClick = false;
+
+  function setOffset(row, x, animate) {
+    var card = row.querySelector('.card');
+    card.style.transition = animate ? '' : 'none';
+    card.style.transform = x ? 'translateX(' + x + 'px)' : '';
+    row.dataset.offset = x;
+    row.classList.toggle('open-left', x > 0);
+    row.classList.toggle('open-right', x < 0);
+  }
+
+  function closeOpenRow() {
+    if (openRow) setOffset(openRow, 0, true);
+    openRow = null;
+  }
+
+  els.list.addEventListener('pointerdown', function (e) {
+    suppressClick = false;
+    if (e.button > 0) return;
+    var card = e.target.closest('.card');
+    if (!card) return;
+    var row = card.closest('.row');
+    if (openRow && openRow !== row) closeOpenRow();
+    swipe = {
+      row: row, card: card, id: e.pointerId,
+      x: e.clientX, y: e.clientY,
+      base: Number(row.dataset.offset) || 0,
+      horizontal: false
+    };
+  });
+
+  els.list.addEventListener('pointermove', function (e) {
+    if (!swipe || e.pointerId !== swipe.id) return;
+    var dx = e.clientX - swipe.x;
+    var dy = e.clientY - swipe.y;
+    if (!swipe.horizontal) {
+      if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy) * 1.2) {
+        swipe.horizontal = true;
+        try { swipe.card.setPointerCapture(e.pointerId); } catch (err) { /* 무시 */ }
+        if (isEditingQty()) document.activeElement.blur();
+      } else if (Math.abs(dy) > 10) {
+        swipe = null; // 세로 스크롤
+        return;
+      } else {
+        return;
+      }
+    }
+    var x = Math.max(-OPEN * 1.4, Math.min(OPEN * 1.4, swipe.base + dx));
+    setOffset(swipe.row, x, false);
+  });
+
+  function endSwipe(e) {
+    if (!swipe || e.pointerId !== swipe.id) return;
+    if (swipe.horizontal) {
+      var x = Number(swipe.row.dataset.offset) || 0;
+      var target = Math.abs(x) > OPEN / 2 ? (x > 0 ? OPEN : -OPEN) : 0;
+      setOffset(swipe.row, target, true);
+      openRow = target ? swipe.row : null;
+      suppressClick = true; // 민 뒤에 따라오는 클릭(수정 창 열림) 막기
+    }
+    swipe = null;
+  }
+  els.list.addEventListener('pointerup', endSwipe);
+  els.list.addEventListener('pointercancel', endSwipe);
+
+  // 클릭 가로채기: 밀고 난 직후 클릭 무시, 열린 카드를 누르면 닫기만
+  els.list.addEventListener('click', function (e) {
+    if (suppressClick) {
+      suppressClick = false;
+      e.stopPropagation();
+      e.preventDefault();
+      return;
+    }
+    if (openRow && openRow.contains(e.target) && e.target.closest('.card')) {
+      closeOpenRow();
+      e.stopPropagation();
+      e.preventDefault();
+    }
+  }, true);
+
+  // 다른 곳을 누르면 열린 줄 닫기
+  document.addEventListener('pointerdown', function (e) {
+    if (openRow && !openRow.contains(e.target)) closeOpenRow();
   });
 
   // 날짜가 바뀌면(자정이 지나면) D-day 다시 계산

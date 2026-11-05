@@ -16,7 +16,9 @@
     <header class="top">
       <div class="top-row">
         <h1>🧊 우리집 냉장고</h1>
-        <span class="count" id="totalCount">0개</span>
+        <div class="top-actions">
+          <button type="button" class="recipe-btn" id="recipeBtn">추천 레시피</button>
+        </div>
       </div>
       <button type="button" class="alert-banner" id="alertBanner" hidden></button>
       <input type="search" id="search" class="search" placeholder="재료 검색" autocomplete="off" aria-label="재료 검색">
@@ -95,6 +97,20 @@
     </form>
   </section>
 
+  <!-- 추천 레시피 화면 -->
+  <section class="panel" id="recipePanel" role="dialog" aria-modal="true" aria-labelledby="recipeTitle" hidden>
+    <header class="panel-head">
+      <button type="button" class="back" id="recipeBack" aria-label="뒤로">
+        <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div>
+        <h2 id="recipeTitle">추천 레시피</h2>
+        <p class="panel-sub" id="recipeSub"></p>
+      </div>
+    </header>
+    <div class="panel-body" id="recipeBody"></div>
+  </section>
+
   <div class="toast" id="toast" role="status" hidden>
     <span id="toastText"></span>
     <button type="button" id="toastAction" hidden>실행 취소</button>
@@ -102,6 +118,7 @@
 
   <script src="js/storage.js"></script>
   <script src="js/ingredients.js"></script>
+  <script src="js/recipe-data.js"></script>
   <script src="js/recipes.js"></script>
   <script src="js/app.js"></script>
 </body>
