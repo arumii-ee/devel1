@@ -585,3 +585,39 @@ main { padding: 12px 16px; }
   outline: none;
 }
 .panel .btn.danger { margin-top: 24px; }
+
+/* ===== 앱 설치 안내 ===== */
+.install-bar {
+  display: flex;
+  align-items: stretch;
+  margin-top: 10px;
+  border-radius: 12px;
+  background: var(--primary-soft);
+  overflow: hidden;
+}
+.install-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 8px 12px;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+.install-main img { border-radius: 7px; flex-shrink: 0; }
+.install-main b { display: block; font-size: 15px; color: var(--primary); }
+.install-main small { display: block; font-size: 12px; color: var(--muted); }
+.install-close {
+  width: 48px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 16px;
+}
+
+/* 앱으로 실행 중일 때: 당겨서 새로고침 방지 */
+@media (display-mode: standalone) {
+  html, body { overscroll-behavior-y: contain; }
+}

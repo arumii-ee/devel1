@@ -610,7 +610,9 @@
     toast: toast,
     render: render,
     openOverlay: openOverlay,
-    closeOverlay: closeOverlay
+    closeOverlay: closeOverlay,
+    openAdd: function () { openSheet(null); },
+    openRecipes: openRecipes
   };
 
   /* ---------- 시작 ---------- */
