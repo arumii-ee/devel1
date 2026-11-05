@@ -39,7 +39,7 @@
     if (code === 'bad-code') return '가족 코드는 12자리예요. (예: K7PM-3QXA-B2CD)';
     if (code === 'permission-denied') return '권한이 없어요. 코드가 바뀌었거나 Firebase 보안 규칙 설정을 확인해 주세요.';
     if (code === 'unavailable') return '서버에 연결할 수 없어요. 인터넷 연결을 확인해 주세요.';
-    if (code === 'auth/operation-not-allowed' || code === 'auth/admin-restricted-operation') return 'Firebase에서 익명 로그인을 켜 주세요. (README 참고)';
+    if (code === 'auth/operation-not-allowed' || code === 'auth/admin-restricted-operation' || code === 'auth/configuration-not-found') return 'Firebase에서 Authentication → 익명 로그인을 켜 주세요. (README 참고)';
     if (code === 'auth/unauthorized-domain') return 'Firebase 승인된 도메인에 앱 주소를 추가해 주세요. (README 참고)';
     if (code === 'auth/network-request-failed') return '인터넷 연결을 확인해 주세요.';
     return '연결에 실패했어요. ' + code;
