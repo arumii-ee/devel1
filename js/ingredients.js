@@ -94,6 +94,67 @@
     return String(Math.round(n * 100) / 100);
   }
 
+  // 수량은 0 ~ MAX_QTY (서버 규칙과 같은 상한), 소수 둘째 자리까지
+  var MAX_QTY = 100000;
+  function clampQty(n) {
+    n = Number(n);
+    if (!isFinite(n) || n < 0) n = 0;
+    return Math.min(MAX_QTY, Math.round(n * 100) / 100);
+  }
+
+  /* ---------- 초성 검색 ---------- */
+
+  var CHOSEONG = 'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ';
+
+  function chosungOf(ch) {
+    var c = ch.charCodeAt(0) - 0xAC00;
+    return c >= 0 && c <= 11171 ? CHOSEONG[Math.floor(c / 588)] : null;
+  }
+
+  function normText(s) {
+    return String(s || '').replace(/\s+/g, '').toLowerCase();
+  }
+
+  // 검색어의 각 글자: 초성(ㄱ~ㅎ)이면 이름 글자의 초성과, 아니면 글자 그대로 비교
+  // 예) 'ㅇㅇ' → 우유, 'ㄷ부' → 두부, '대ㅍ' → 대파
+  function matchesQuery(name, query) {
+    var n = normText(name);
+    var q = normText(query);
+    if (!q) return true;
+    if (n.indexOf(q) !== -1) return true;
+    for (var start = 0; start + q.length <= n.length; start++) {
+      var ok = true;
+      for (var i = 0; i < q.length && ok; i++) {
+        var qc = q[i], nc = n[start + i];
+        ok = CHOSEONG.indexOf(qc) !== -1 ? (nc === qc || chosungOf(nc) === qc) : nc === qc;
+      }
+      if (ok) return true;
+    }
+    return false;
+  }
+
+  /* ---------- 같은 재료 찾기 · 합치기 ---------- */
+
+  // 이름(공백·대소문자 무시) + 보관 위치 + 단위가 같으면 같은 재료
+  function findSame(items, fields) {
+    var key = normText(fields.name);
+    var unit = normText(fields.unit);
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      if (normText(it.name) === key && it.location === fields.location && normText(it.unit) === unit) return it;
+    }
+    return null;
+  }
+
+  // 합친 결과: 수량은 더하고, 유통기한은 더 빠른 날짜(없으면 있는 쪽)
+  function mergedFields(existing, fields) {
+    var a = existing.expiry, b = fields.expiry;
+    return {
+      quantity: clampQty((existing.quantity || 0) + (fields.quantity || 0)),
+      expiry: a && b ? (a < b ? a : b) : (a || b || null)
+    };
+  }
+
   Fridge.ingredients = {
     LOCATIONS: LOCATIONS,
     create: create,
@@ -102,6 +163,11 @@
     dday: dday,
     sort: sort,
     addDays: addDays,
-    formatQty: formatQty
+    formatQty: formatQty,
+    MAX_QTY: MAX_QTY,
+    clampQty: clampQty,
+    matchesQuery: matchesQuery,
+    findSame: findSame,
+    mergedFields: mergedFields
   };
 })(window.Fridge = window.Fridge || {});

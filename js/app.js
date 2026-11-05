@@ -21,7 +21,7 @@
     addBtn: $('addBtn'), sheet: $('sheet'), backdrop: $('backdrop'),
     form: $('form'), title: $('sheetTitle'), name: $('fName'), nameError: $('nameError'),
     qty: $('fQty'), unit: $('fUnit'), expiry: $('fExpiry'),
-    deleteBtn: $('deleteBtn'), cancelBtn: $('cancelBtn'),
+    deleteBtn: $('deleteBtn'), cancelBtn: $('cancelBtn'), saveBtn: $('saveBtn'),
     recipeBtn: $('recipeBtn'), recipePanel: $('recipePanel'), recipeBack: $('recipeBack'),
     recipeBody: $('recipeBody'), recipeSub: $('recipeSub'),
     toast: $('toast'), toastText: $('toastText'), toastAction: $('toastAction')
@@ -30,10 +30,10 @@
   /* ---------- 렌더링 ---------- */
 
   function visibleItems() {
-    var q = state.query.trim().toLowerCase();
+    var q = state.query.trim();
     return I.sort(state.items).filter(function (it) {
       if (state.filter !== 'all' && it.location !== state.filter) return false;
-      if (q && it.name.toLowerCase().indexOf(q) === -1) return false;
+      if (q && !I.matchesQuery(it.name, q)) return false;
       return true;
     });
   }
@@ -98,6 +98,7 @@
     input.type = 'number';
     input.inputMode = 'decimal';
     input.min = '0';
+    input.max = String(I.MAX_QTY);
     input.step = 'any';
     input.setAttribute('enterkeyhint', 'done');
     input.value = I.formatQty(it.quantity);
@@ -161,7 +162,9 @@
     // 빈 화면
     els.empty.hidden = items.length > 0;
     if (!items.length) {
-      els.emptyText.innerHTML = state.items.length
+      els.emptyText.innerHTML = store.mode === 'pending'
+        ? '가족 냉장고 불러오는 중…'
+        : state.items.length
         ? '조건에 맞는 재료가 없어요.'
         : '아직 등록된 재료가 없어요.<br>아래 <b>+</b> 버튼으로 추가해 보세요.';
     }
@@ -205,8 +208,11 @@
   });
 
 
+  var submitting = false;
+
   function openSheet(item) {
     state.editingId = item ? item.id : null;
+    setSubmitting(false);
     els.title.textContent = item ? '재료 수정' : '재료 추가';
     els.deleteBtn.hidden = !item;
     els.nameError.hidden = true;
@@ -241,6 +247,13 @@
       }
     }, 220);
     state.editingId = null;
+    setSubmitting(false);
+  }
+
+  // 저장 버튼 연타로 같은 재료가 두 번 들어가지 않게
+  function setSubmitting(on) {
+    submitting = on;
+    els.saveBtn.disabled = on;
   }
 
   function closeSheet() { closeOverlay('sheet'); }
@@ -358,7 +371,7 @@
     var q = parseFloat(els.qty.value);
     return {
       name: els.name.value.trim(),
-      quantity: isFinite(q) && q >= 0 ? q : 1,
+      quantity: isFinite(q) && q >= 0 ? I.clampQty(q) : 1,
       unit: els.unit.value.trim(),
       location: els.form.querySelector('input[name="location"]:checked').value,
       expiry: els.expiry.value || null
@@ -367,20 +380,36 @@
 
   function onSubmit(e) {
     e.preventDefault();
+    if (submitting) return;
     var f = readForm();
     if (!f.name) {
       els.nameError.hidden = false;
       els.name.focus();
       return;
     }
-    var p = state.editingId
-      ? store.update(state.editingId, f)
-      : store.add(I.create(f));
     var editing = !!state.editingId;
+    var p, msg;
+    var same = editing ? null : I.findSame(state.items, f);
+    if (same && window.confirm('이미 있는 “' + same.name + '” ' + I.formatQty(same.quantity) + (same.unit || '') +
+        '에 수량을 더할까요?\n[취소]를 누르면 따로 추가해요.')) {
+      var m = I.mergedFields(same, f);
+      p = store.update(same.id, m);
+      msg = '“' + same.name + '”에 합쳤어요 · ' + I.formatQty(m.quantity) + (same.unit || '');
+    } else if (editing) {
+      p = store.update(state.editingId, f);
+      msg = '수정했어요';
+    } else {
+      p = store.add(I.create(f));
+      msg = '“' + f.name + '” 추가했어요';
+    }
+    setSubmitting(true);
     p.then(function () {
       closeSheet();
-      toast(editing ? '수정했어요' : '“' + f.name + '” 추가했어요');
-    }, saveFailed);
+      toast(msg);
+    }, function () {
+      setSubmitting(false);
+      saveFailed();
+    });
   }
 
   // 가족 냉장고에 연결되기 전 등 저장할 수 없을 때
@@ -404,7 +433,7 @@
   function setQty(id, value) {
     var item = findItem(id);
     if (!item) return;
-    var next = Math.max(0, Math.round(value * 100) / 100);
+    var next = I.clampQty(value);
     if (next === item.quantity) return;
     store.update(id, { quantity: next }).catch(function () { saveFailed(); render(); });
     if (next === 0) toast('“' + item.name + '” 다 떨어졌어요', '삭제', function () { removeItem(id); });
@@ -431,7 +460,7 @@
     var step = e.target.closest('[data-step]');
     if (step) {
       var v = parseFloat(els.qty.value) || 0;
-      els.qty.value = I.formatQty(Math.max(0, v + Number(step.dataset.step)));
+      els.qty.value = I.formatQty(I.clampQty(v + Number(step.dataset.step)));
       return;
     }
     var chip = e.target.closest('[data-days]');
@@ -470,7 +499,8 @@
     // focusout 이 끝난 뒤(포커스가 빠진 상태에서) 저장·다시 그리기
     setTimeout(function () {
       if (item && isFinite(v) && v >= 0) setQty(id, v);
-      if (renderPending || !item || !(isFinite(v) && v >= 0)) render(); // 잘못된 값이면 원래 값으로 복구
+      // 잘못된 값이거나 상한을 넘어 고쳐졌으면 화면을 다시 그려 실제 값으로 보여줌
+      if (renderPending || !item || !(isFinite(v) && v >= 0) || I.clampQty(v) !== v) render();
     }, 0);
   });
 

@@ -286,6 +286,10 @@
     body.appendChild(name.wrap);
 
     var leaveBtn = button('가족 공유 그만하기', 'danger block', function () {
+      if (!F.state.members.length || store.status === 'connecting') {
+        ui.toast('가족 정보를 불러오는 중이에요. 잠시 후 다시 해 주세요');
+        return;
+      }
       var msg = '이 기기에서 가족 공유를 끌까요?\n지금 보이는 재료는 이 기기에 복사해 둘게요.';
       if (F.isOwner && F.state.members.length > 1) msg += '\n관리자는 다른 가족에게 넘어가요.';
       if (F.state.members.length <= 1) msg += '\n마지막 멤버라서 가족 냉장고의 온라인 데이터는 삭제돼요.';
