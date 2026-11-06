@@ -182,6 +182,7 @@
     function fireAndForget(p) {
       p.catch(function (e) {
         if (e && e.code === 'permission-denied') onDenied(e);
+        else if (e && e.code === 'not-found') return; // 그사이 다른 가족이 재료를 지움 (연결 문제 아님)
         else store.setStatus('error', e);
       });
       return Promise.resolve();

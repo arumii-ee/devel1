@@ -333,7 +333,7 @@
 
   function hide() {
     els.panel.classList.remove('show');
-    document.body.classList.remove('no-scroll');
+    ui.unlockScroll();
     setTimeout(function () {
       if (!els.panel.classList.contains('show')) els.panel.hidden = true;
     }, 220);

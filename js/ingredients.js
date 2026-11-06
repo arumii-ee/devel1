@@ -62,16 +62,17 @@
     return 'D-' + d;
   }
 
-  // 유통기한순: 지남 → 임박 → 곧 → 여유 → 기한 없음
-  function byExpiry(a, b) {
+  // 유통기한순: 지남 → 임박 → 곧 → 여유 → 기한 없음 (sign = -1 이면 반대로)
+  // 같은 상태 안에서 다 떨어진(수량 0) 재료는 정렬 방향과 상관없이 아래로
+  function byExpiry(a, b, sign) {
+    sign = sign || 1;
     var sa = STATUS_ORDER[status(a)];
     var sb = STATUS_ORDER[status(b)];
-    if (sa !== sb) return sa - sb;
-    // 같은 상태 안에서는 다 떨어진(수량 0) 재료를 아래로
+    if (sa !== sb) return sign * (sa - sb);
     var oa = a.quantity <= 0 ? 1 : 0, ob = b.quantity <= 0 ? 1 : 0;
     if (oa !== ob) return oa - ob;
-    if (a.expiry && b.expiry && a.expiry !== b.expiry) return a.expiry < b.expiry ? -1 : 1;
-    return byName(a, b);
+    if (a.expiry && b.expiry && a.expiry !== b.expiry) return sign * (a.expiry < b.expiry ? -1 : 1);
+    return sign * byName(a, b);
   }
 
   function byName(a, b) {
@@ -101,6 +102,7 @@
   function sort(items, by, dir) {
     var cmp = COMPARATORS[by] || byExpiry;
     var sign = dir === 'desc' ? -1 : 1;
+    if (cmp === byExpiry) return items.slice().sort(function (a, b) { return byExpiry(a, b, sign); });
     return items.slice().sort(function (a, b) { return sign * cmp(a, b); });
   }
 
