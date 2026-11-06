@@ -13,6 +13,7 @@
     query: '',
     sortBy: 'expiry',
     sortDir: 'asc',
+    recipeCat: 'all',
     editingId: null
   };
 
@@ -26,7 +27,7 @@
     qty: $('fQty'), unit: $('fUnit'), expiry: $('fExpiry'),
     deleteBtn: $('deleteBtn'), cancelBtn: $('cancelBtn'), saveBtn: $('saveBtn'),
     recipeBtn: $('recipeBtn'), recipePanel: $('recipePanel'), recipeBack: $('recipeBack'),
-    recipeBody: $('recipeBody'), recipeSub: $('recipeSub'),
+    recipeBody: $('recipeBody'), recipeSub: $('recipeSub'), recipeTabs: $('recipeTabs'),
     toast: $('toast'), toastText: $('toastText'), toastAction: $('toastAction')
   };
 
@@ -316,13 +317,52 @@
     return card;
   }
 
+  /* 종류 탭 (선택은 이 기기에만 기억) */
+  var RECIPE_CAT_KEY = 'fridge-app:recipeCat';
+  var CATS = Fridge.RECIPE_DATA.CATEGORIES;
+
+  function loadRecipeCat() {
+    try {
+      var c = window.localStorage.getItem(RECIPE_CAT_KEY);
+      if (CATS.some(function (x) { return x.id === c; })) state.recipeCat = c;
+    } catch (e) { /* 기본값(전체) */ }
+  }
+
+  function saveRecipeCat() {
+    try { window.localStorage.setItem(RECIPE_CAT_KEY, state.recipeCat); } catch (e) { /* 이번 화면에서만 적용 */ }
+  }
+
+  function renderRecipeTabs(list) {
+    var count = { all: list.length };
+    list.forEach(function (r) { count[r.recipe.cat] = (count[r.recipe.cat] || 0) + 1; });
+    // 지금 재료로 나오는 레시피가 없는 종류는 숨기고, 고른 종류가 비면 전체로
+    if (!count[state.recipeCat]) state.recipeCat = 'all';
+    var nav = els.recipeTabs;
+    nav.textContent = '';
+    nav.hidden = !list.length;
+    CATS.forEach(function (c) {
+      if (!count[c.id]) return;
+      var on = c.id === state.recipeCat;
+      var b = el('button', 'rtab' + (on ? ' is-active' : ''), c.label + ' ');
+      b.type = 'button';
+      b.setAttribute('role', 'tab');
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+      b.dataset.cat = c.id;
+      b.appendChild(el('b', null, String(count[c.id])));
+      nav.appendChild(b);
+    });
+    var active = nav.querySelector('.is-active');
+    if (active && active.scrollIntoView) active.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
+
   function renderRecipes() {
     var stock = state.items.filter(function (it) { return it.quantity > 0; });
-    Fridge.recipes.recommend(state.items).then(function (list) {
+    Fridge.recipes.recommend(state.items).then(function (all) {
       var body = els.recipeBody;
       body.textContent = '';
       els.recipeSub.textContent = '가진 재료 ' + stock.length + '개 · 유통기한 급한 재료 먼저';
-      if (!list.length) {
+      renderRecipeTabs(all);
+      if (!all.length) {
         var empty = el('div', 'empty');
         empty.appendChild(el('div', 'empty-icon', '🍳'));
         empty.appendChild(el('p', null, stock.length
@@ -331,6 +371,7 @@
         body.appendChild(empty);
         return;
       }
+      var list = state.recipeCat === 'all' ? all : all.filter(function (r) { return r.recipe.cat === state.recipeCat; });
       var groups = [
         { title: '바로 만들 수 있어요', items: list.filter(function (r) { return !r.missing.length; }) },
         { title: '재료 1~2가지만 더 있으면', items: list.filter(function (r) { return r.missing.length; }) }
@@ -344,6 +385,17 @@
       });
     });
   }
+
+  els.recipeTabs.addEventListener('click', function (e) {
+    var b = e.target.closest('.rtab');
+    if (!b || b.dataset.cat === state.recipeCat) return;
+    state.recipeCat = b.dataset.cat;
+    saveRecipeCat();
+    renderRecipes();
+    els.recipePanel.scrollTop = 0;
+  });
+
+  loadRecipeCat();
 
 
   /* ---------- 토스트 ---------- */
@@ -406,7 +458,7 @@
     if (same && window.confirm('이미 있는 “' + same.name + '” ' + I.formatQty(same.quantity) + (same.unit || '') +
         '에 수량을 더할까요?\n[취소]를 누르면 따로 추가해요.')) {
       var m = I.mergedFields(same, f);
-      p = store.update(same.id, m);
+      p = store.update(same.id, m, { readd: true });
       msg = '“' + same.name + '”에 합쳤어요 · ' + I.formatQty(m.quantity) + (same.unit || '');
     } else if (editing) {
       p = store.update(state.editingId, f);

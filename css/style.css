@@ -454,6 +454,36 @@ main { padding: 12px 16px; }
   margin: 0 auto;
   padding: 4px 16px calc(24px + env(safe-area-inset-bottom));
 }
+/* 종류 탭: 헤더 아래 한 줄, 넘치면 가로로 밀어서 보기 */
+.panel-head { flex-wrap: wrap; }
+.rtabs {
+  flex: 0 0 100%;
+  display: flex;
+  gap: 6px;
+  margin: 4px 0 0;
+  padding: 2px 0 2px 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.rtabs[hidden] { display: none; }
+.rtabs::-webkit-scrollbar { display: none; }
+.rtab {
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 4px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  white-space: nowrap;
+}
+.rtab b { font-weight: 600; color: var(--muted); font-size: 12px; margin-left: 3px; }
+.rtab.is-active { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); font-weight: 600; }
+.rtab.is-active b { color: inherit; opacity: .85; }
+.rtab:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
 .recipe-group { margin: 18px 0 8px; font-size: 15px; color: var(--muted); }
 .recipe-group b { color: var(--text); }
 

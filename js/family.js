@@ -204,9 +204,11 @@
         if (name) data.addedBy = data.addedBy || name;
         return fireAndForget(col.doc(item.id).set(data)).then(function () { return data; });
       },
-      update: function (id, patch) {
+      update: function (id, patch, opts) {
         var data = clean(Object.assign({}, patch, { updatedAt: Date.now() }));
         if (name) data.updatedBy = name;
+        // 같은 재료를 다시 등록해 합쳤으면 등록한 사람도 최근에 넣은 사람으로
+        if (name && opts && opts.readd) data.addedBy = name;
         return fireAndForget(col.doc(id).update(data));
       },
       remove: function (id) {
