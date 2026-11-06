@@ -2,7 +2,7 @@ rules_version = '2';
 // My Refrigerator - 가족 공유 보안 규칙
 // ---------------------------------------------------------------
 // - 모든 접근은 로그인(익명 로그인)이 필요합니다.
-// - 가족 냉장고의 재료는 "멤버 명단"에 있는 기기만 읽고 쓸 수 있습니다.
+// - 가족 냉장고의 재료와 메모는 "멤버 명단"에 있는 기기만 읽고 쓸 수 있습니다.
 // - 멤버가 되려면 현재 유효한 가족 코드(12자리)를 알아야 합니다.
 // - 관리자(만든 사람)는 멤버를 내보내고 코드를 바꿀 수 있습니다.
 // - 관리자가 30일 넘게 안 들어오면 다른 멤버가 관리자를 넘겨받을 수 있습니다.
@@ -54,6 +54,15 @@ service cloud.firestore {
         && (d.expiry == null || (d.expiry is string && d.expiry.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')))
         && d.createdAt is number && d.updatedAt is number
         && optionalName(d, 'addedBy') && optionalName(d, 'updatedBy');
+    }
+    // 메모: 글 1~200자, 작성 시각은 미래(10분 넘게)로 못 씀, 작성자 이름 10자 이하
+    function validMemo(d, memoId) {
+      return d.keys().hasAll(['id', 'text', 'createdAt', 'by'])
+        && d.keys().hasOnly(['id', 'text', 'createdAt', 'by'])
+        && d.id == memoId
+        && d.text is string && d.text.size() > 0 && d.text.size() <= 200
+        && d.createdAt is number && d.createdAt <= request.time.toMillis() + 600000
+        && validName(d.by) && d.by.size() > 0;
     }
 
     // 초대 코드 → 가족 찾기. 코드를 정확히 알아야만 읽을 수 있고, 목록 보기는 불가
@@ -113,6 +122,13 @@ service cloud.firestore {
       match /items/{itemId} {
         allow read, delete: if isMember(fid);
         allow create, update: if isMember(fid) && validItem(request.resource.data, itemId);
+      }
+
+      // 메모: 멤버 누구나 쓰고 지울 수 있음. 남긴 메모는 고칠 수 없음(지우고 다시 쓰기)
+      match /memos/{memoId} {
+        allow read, delete: if isMember(fid);
+        allow create: if isMember(fid) && validMemo(request.resource.data, memoId);
+        allow update: if false;
       }
     }
   }

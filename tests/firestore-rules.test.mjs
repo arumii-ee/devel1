@@ -1,5 +1,5 @@
 /*
- * Firestore 보안 규칙 테스트 (공격 시나리오 75개)
+ * Firestore 보안 규칙 테스트 (공격 시나리오 91개)
  * ---------------------------------------------------------------
  * firestore.rules 를 고친 뒤 아래처럼 실행해 모두 통과하는지 확인하세요. (Node.js, Java 필요)
  *
@@ -68,6 +68,20 @@ const bad = { '이름 41자': item('b', { name: 'x'.repeat(41) }), '빈 이름':
   '문서 id 불일치': item('other'), '필수 칸 없음': { id: 'b', name: '우유' }, 'addedBy 11자': item('b', { addedBy: 'x'.repeat(11) }) };
 for (const [k, v] of Object.entries(bad)) await t(`${k} 거부`, () => assertFails(setDoc(doc(alice, 'families', FID, 'items', 'b'), v)));
 await t('수정으로 이상한 칸 추가 거부', () => assertFails(updateDoc(doc(alice, 'families', FID, 'items', 'a1'), { hack: 1 })));
+
+console.log('[메모]');
+const memo = (id, extra = {}) => ({ id, text: '우유 사 오기', createdAt: NOW, by: '아빠', ...extra });
+await t('멤버는 메모 쓰기 성공', () => assertSucceeds(setDoc(doc(alice, 'families', FID, 'memos', 'm1'), memo('m1'))));
+await t('멤버는 메모 읽기 성공', () => assertSucceeds(getDocs(collection(alice, 'families', FID, 'memos'))));
+await t('비멤버는 메모 읽기 불가', () => assertFails(getDocs(collection(mallory, 'families', FID, 'memos'))));
+await t('비멤버는 메모 쓰기 불가', () => assertFails(setDoc(doc(mallory, 'families', FID, 'memos', 'x'), memo('x'))));
+await t('비멤버는 메모 삭제 불가', () => assertFails(deleteDoc(doc(mallory, 'families', FID, 'memos', 'm1'))));
+await t('메모 수정 불가', () => assertFails(updateDoc(doc(alice, 'families', FID, 'memos', 'm1'), { text: '바꿈' })));
+const badMemo = { '빈 글': memo('mb', { text: '' }), '201자 글': memo('mb', { text: 'x'.repeat(201) }), '글이 숫자': memo('mb', { text: 1 }),
+  '작성자 11자': memo('mb', { by: 'x'.repeat(11) }), '작성자 없음': { id: 'mb', text: 'x', createdAt: NOW }, '빈 작성자': memo('mb', { by: '' }),
+  '미래 시각': memo('mb', { createdAt: Date.now() + 86400000 }), '허용 안 된 칸': memo('mb', { hack: 1 }), '문서 id 불일치': memo('other') };
+for (const [k, v] of Object.entries(badMemo)) await t(`메모 ${k} 거부`, () => assertFails(setDoc(doc(alice, 'families', FID, 'memos', 'mb'), v)));
+await t('다른 멤버가 쓴 메모도 삭제 성공', () => assertSucceeds(deleteDoc(doc(owner, 'families', FID, 'memos', 'm1'))));
 
 console.log('[관리자 권한]');
 await t('멤버는 코드 바꾸기 불가', () => assertFails(updateDoc(doc(alice, 'families', FID), { code: CODE2 })));

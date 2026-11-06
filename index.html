@@ -28,6 +28,7 @@
             <span class="sync-dot" id="syncDot" hidden></span>
           </button>
           <button type="button" class="recipe-btn" id="recipeBtn">레시피</button>
+          <button type="button" class="recipe-btn" id="memoBtn">메모</button>
         </div>
       </div>
       <div class="install-bar" id="installBar" hidden>
@@ -143,6 +144,30 @@
     <div class="panel-body" id="familyBody"></div>
   </section>
 
+  <!-- 메모 화면 -->
+  <section class="panel" id="memoPanel" role="dialog" aria-modal="true" aria-labelledby="memoTitle" hidden>
+    <header class="panel-head">
+      <button type="button" class="back" id="memoBack" aria-label="뒤로">
+        <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div>
+        <h2 id="memoTitle">메모</h2>
+        <p class="panel-sub" id="memoSub"></p>
+      </div>
+    </header>
+    <div class="panel-body">
+      <form class="memo-form" id="memoForm" novalidate>
+        <textarea id="memoText" maxlength="200" rows="3" placeholder="예: 우유 사 오기, 계란 내일까지 먹기" aria-label="메모 내용"></textarea>
+        <div class="memo-form-row">
+          <small class="memo-count" id="memoCount">0 / 200</small>
+          <button type="submit" class="btn primary" id="memoSave">남기기</button>
+        </div>
+      </form>
+      <ul class="memo-list" id="memoList" aria-label="메모 목록"></ul>
+      <p class="memo-empty" id="memoEmpty" hidden>아직 남긴 메모가 없어요.</p>
+    </div>
+  </section>
+
   <div class="toast" id="toast" role="status" hidden>
     <span id="toastText"></span>
     <button type="button" id="toastAction" hidden>실행 취소</button>
@@ -150,12 +175,14 @@
 
   <script src="js/storage.js"></script>
   <script src="js/ingredients.js"></script>
+  <script src="js/memos.js"></script>
   <script src="js/firebase-config.js"></script>
   <script src="js/family.js"></script>
   <script src="js/recipe-data.js"></script>
   <script src="js/recipes.js"></script>
   <script src="js/app.js"></script>
   <script src="js/family-ui.js"></script>
+  <script src="js/memo-ui.js"></script>
   <script src="js/pwa.js"></script>
 </body>
 </html>

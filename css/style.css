@@ -63,7 +63,7 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 body.no-scroll { overflow: hidden; }
-button, input { font: inherit; color: inherit; }
+button, input, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
 [hidden] { display: none !important; }
 
@@ -645,3 +645,54 @@ main { padding: 12px 16px; }
 .btn.small { height: 36px; padding: 0 12px; font-size: 14px; }
 .btn.mt { margin-top: 10px; }
 .muted { color: var(--muted); }
+
+/* ===== 메모 ===== */
+.memo-form { margin: 14px 0 18px; }
+.memo-form textarea {
+  display: block;
+  width: 100%;
+  min-height: 84px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  resize: vertical;
+  outline: none;
+}
+.memo-form textarea:focus { border-color: var(--primary); }
+.memo-form-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; }
+.memo-form-row .btn.primary { flex: 0 0 auto; height: 44px; padding: 0 22px; }
+.memo-count { color: var(--muted); font-size: 13px; }
+.memo-list { list-style: none; margin: 0; padding: 0; }
+.memo {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 12px 6px 12px 14px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.memo-main { flex: 1; min-width: 0; }
+.memo-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.memo-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 6px; color: var(--muted); font-size: 13px; }
+.memo-by { font-weight: 600; color: var(--primary); }
+.memo-del {
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--muted);
+}
+.memo-del:active { background: var(--expired-bg); color: var(--expired); }
+.memo-empty { margin: 40px 0; text-align: center; color: var(--muted); }
+
+/* 좁은 화면: 상단 버튼 3개가 들어가도록 */
+@media (max-width: 380px) {
+  .top-actions { gap: 6px; }
+  .recipe-btn { padding: 0 11px; }
+  .top h1 { font-size: 18px; }
+}
