@@ -11,7 +11,8 @@
  *  families/{familyId}                 { ownerUid, code, createdAt }
  *  families/{familyId}/members/{uid}   { name, joinedAt, code, lastSeen }
  *  families/{familyId}/items/{itemId}  재료
- *  families/{familyId}/memos/{memoId}  메모 { id, text, createdAt, by }
+ *  families/{familyId}/memos/{memoId}  메모 { id, text, createdAt, by, updatedAt?, editedBy?, comments? }
+ *                                      comments: { [댓글 id]: { id, text, createdAt, by, updatedAt?, editedBy? } }
  *  invites/{code}                      { familyId, createdAt }
  */
 (function (Fridge) {
@@ -242,9 +243,20 @@
     function report(p) {
       p.catch(function (e) {
         if (e && e.code === 'permission-denied') onDenied(e);
+        else if (e && e.code === 'not-found') return; // 그사이 다른 가족이 메모를 지움
         else store.setStatus('error', e);
       });
       return Promise.resolve();
+    }
+
+    function cleanComment(c) {
+      var out = {
+        id: String(c.id), text: String(c.text).slice(0, memos.COMMENT_MAX),
+        createdAt: c.createdAt, by: cleanName(c.by) || name
+      };
+      if (typeof c.updatedAt === 'number') out.updatedAt = c.updatedAt;
+      if (c.editedBy) out.editedBy = cleanName(c.editedBy);
+      return out;
     }
 
     return {
@@ -259,10 +271,42 @@
           id: memo.id, text: String(memo.text).slice(0, memos.TEXT_MAX),
           createdAt: memo.createdAt, by: cleanName(memo.by) || name
         };
+        if (typeof memo.updatedAt === 'number') data.updatedAt = memo.updatedAt;
+        if (memo.editedBy) data.editedBy = cleanName(memo.editedBy);
+        if (memo.comments) {
+          data.comments = {};
+          Object.keys(memo.comments).forEach(function (k) {
+            var c = memo.comments[k];
+            if (c && c.id === k && c.text) data.comments[k] = cleanComment(c);
+          });
+        }
         return report(col.doc(memo.id).set(data));
+      },
+      edit: function (id, fields) {
+        return report(col.doc(id).update({
+          text: String(fields.text).slice(0, memos.TEXT_MAX),
+          updatedAt: fields.updatedAt,
+          editedBy: cleanName(fields.editedBy) || name
+        }));
       },
       remove: function (id) {
         return report(col.doc(id).delete());
+      },
+      // 댓글은 메모 문서 안의 comments 칸에 하나씩 넣고 빼므로, 여러 명이 동시에 달아도 서로 덮어쓰지 않음
+      // lastCommentId: 이번에 바꾼 댓글 id (보안 규칙이 그 댓글 하나만 검사)
+      setComment: function (memoId, comment) {
+        var c = cleanComment(comment);
+        return report(col.doc(memoId).update(
+          new window.firebase.firestore.FieldPath('comments', c.id), c,
+          'lastCommentId', c.id
+        ));
+      },
+      removeComment: function (memoId, commentId) {
+        return report(col.doc(memoId).update(
+          new window.firebase.firestore.FieldPath('comments', String(commentId)),
+          window.firebase.firestore.FieldValue.delete(),
+          'lastCommentId', String(commentId)
+        ));
       },
       subscribe: function (cb) {
         return col.onSnapshot(function (snap) {

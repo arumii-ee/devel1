@@ -1,5 +1,5 @@
 /*
- * Firestore 보안 규칙 테스트 (공격 시나리오 91개)
+ * Firestore 보안 규칙 테스트 (공격 시나리오 127개)
  * ---------------------------------------------------------------
  * firestore.rules 를 고친 뒤 아래처럼 실행해 모두 통과하는지 확인하세요. (Node.js, Java 필요)
  *
@@ -11,7 +11,7 @@
  * (저장소 맨 위의 firebase.json 이 firestore.rules 를 사용합니다)
  */
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs, writeBatch } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, deleteField, collection, getDocs, writeBatch } from 'firebase/firestore';
 import fs from 'fs';
 
 const env = await initializeTestEnvironment({
@@ -76,11 +76,50 @@ await t('멤버는 메모 읽기 성공', () => assertSucceeds(getDocs(collectio
 await t('비멤버는 메모 읽기 불가', () => assertFails(getDocs(collection(mallory, 'families', FID, 'memos'))));
 await t('비멤버는 메모 쓰기 불가', () => assertFails(setDoc(doc(mallory, 'families', FID, 'memos', 'x'), memo('x'))));
 await t('비멤버는 메모 삭제 불가', () => assertFails(deleteDoc(doc(mallory, 'families', FID, 'memos', 'm1'))));
-await t('메모 수정 불가', () => assertFails(updateDoc(doc(alice, 'families', FID, 'memos', 'm1'), { text: '바꿈' })));
+await t('고친 시각 없이 메모 수정 불가(처음)', () => assertFails(updateDoc(doc(alice, 'families', FID, 'memos', 'm1'), { text: '바꿈' })));
 const badMemo = { '빈 글': memo('mb', { text: '' }), '201자 글': memo('mb', { text: 'x'.repeat(201) }), '글이 숫자': memo('mb', { text: 1 }),
   '작성자 11자': memo('mb', { by: 'x'.repeat(11) }), '작성자 없음': { id: 'mb', text: 'x', createdAt: NOW }, '빈 작성자': memo('mb', { by: '' }),
   '미래 시각': memo('mb', { createdAt: Date.now() + 86400000 }), '허용 안 된 칸': memo('mb', { hack: 1 }), '문서 id 불일치': memo('other') };
 for (const [k, v] of Object.entries(badMemo)) await t(`메모 ${k} 거부`, () => assertFails(setDoc(doc(alice, 'families', FID, 'memos', 'mb'), v)));
+console.log('[메모 수정]');
+const mref = (c, id = 'm1') => doc(c, 'families', FID, 'memos', id);
+await t('멤버는 메모 글 수정 성공', () => assertSucceeds(updateDoc(mref(alice), { text: '우유 2개 사 오기', updatedAt: NOW, editedBy: '아빠' })));
+await t('다른 멤버도 메모 글 수정 성공', () => assertSucceeds(updateDoc(mref(owner), { text: '우유 3개', updatedAt: NOW + 1, editedBy: '엄마' })));
+await t('비멤버는 메모 수정 불가', () => assertFails(updateDoc(mref(mallory), { text: '해킹', updatedAt: NOW, editedBy: 'x' })));
+await t('고친 시각 없이 수정 불가(이미 고친 메모)', () => assertFails(updateDoc(mref(alice), { text: '바꿈' })));
+await t('수정으로 남긴 사람 바꾸기 불가', () => assertFails(updateDoc(mref(alice), { by: '엄마', updatedAt: NOW, editedBy: '아빠' })));
+await t('수정으로 남긴 시각 바꾸기 불가', () => assertFails(updateDoc(mref(alice), { createdAt: 1, updatedAt: NOW, editedBy: '아빠' })));
+await t('수정으로 빈 글 불가', () => assertFails(updateDoc(mref(alice), { text: '', updatedAt: NOW, editedBy: '아빠' })));
+await t('수정으로 201자 글 불가', () => assertFails(updateDoc(mref(alice), { text: 'x'.repeat(201), updatedAt: NOW, editedBy: '아빠' })));
+await t('수정으로 이상한 칸 추가 불가', () => assertFails(updateDoc(mref(alice), { text: 'a', updatedAt: NOW, editedBy: '아빠', hack: 1 })));
+await t('미래 수정 시각 불가', () => assertFails(updateDoc(mref(alice), { text: 'a', updatedAt: Date.now() + 86400000, editedBy: '아빠' })));
+await t('고친 사람 11자 불가', () => assertFails(updateDoc(mref(alice), { text: 'a', updatedAt: NOW, editedBy: 'x'.repeat(11) })));
+
+console.log('[댓글]');
+const cm = (id, extra = {}) => ({ id, text: '내가 사 올게', createdAt: NOW, by: '아빠', ...extra });
+const setC = (c, cid, v, last = cid) => updateDoc(mref(c), 'comments.' + cid, v, 'lastCommentId', last);
+await t('멤버는 댓글 달기 성공', () => assertSucceeds(setC(alice, 'c1', cm('c1'))));
+await t('다른 멤버도 댓글 달기 성공', () => assertSucceeds(setC(owner, 'c2', cm('c2', { by: '엄마' }))));
+await t('비멤버는 댓글 달기 불가', () => assertFails(setC(mallory, 'c3', cm('c3'))));
+await t('멤버는 댓글 수정 성공', () => assertSucceeds(setC(alice, 'c1', cm('c1', { text: '퇴근길에 사 올게', updatedAt: NOW, editedBy: '아빠' }))));
+await t('댓글 수정으로 남긴 사람 바꾸기 불가', () => assertFails(setC(alice, 'c1', cm('c1', { by: '엄마', updatedAt: NOW }))));
+await t('댓글 수정으로 남긴 시각 바꾸기 불가', () => assertFails(setC(alice, 'c1', cm('c1', { createdAt: 1, updatedAt: NOW }))));
+const badC = { '빈 글': cm('cb', { text: '' }), '201자 글': cm('cb', { text: 'x'.repeat(201) }), '글이 숫자': cm('cb', { text: 1 }),
+  '작성자 11자': cm('cb', { by: 'x'.repeat(11) }), '작성자 없음': { id: 'cb', text: 'x', createdAt: NOW }, '미래 시각': cm('cb', { createdAt: Date.now() + 86400000 }),
+  '허용 안 된 칸': cm('cb', { hack: 1 }), 'id 불일치': cm('other'), '맵이 아님': '안녕' };
+for (const [k, v] of Object.entries(badC)) await t(`댓글 ${k} 거부`, () => assertFails(setC(alice, 'cb', v)));
+await t('lastCommentId 없이 댓글 달기 불가', () => assertFails(updateDoc(mref(alice), 'comments.c4', cm('c4'))));
+await t('lastCommentId 와 다른 댓글 바꾸기 불가', () => assertFails(setC(alice, 'c5', cm('c5'), 'c1')));
+await t('한 번에 댓글 2개 바꾸기 불가', () => assertFails(updateDoc(mref(alice), 'comments.c6', cm('c6'), 'comments.c7', cm('c7'), 'lastCommentId', 'c6')));
+await t('댓글 달면서 메모 글 바꾸기 불가', () => assertFails(updateDoc(mref(alice), 'comments.c8', cm('c8'), 'lastCommentId', 'c8', 'text', '해킹')));
+await t('메모 글 고치면서 댓글 지우기 불가', () => assertFails(updateDoc(mref(alice), { text: 'a', updatedAt: NOW, editedBy: '아빠', comments: {} })));
+await t('다른 멤버가 단 댓글도 삭제 성공', () => assertSucceeds(updateDoc(mref(alice), 'comments.c2', deleteField(), 'lastCommentId', 'c2')));
+await t('비멤버는 댓글 삭제 불가', () => assertFails(updateDoc(mref(mallory), 'comments.c1', deleteField(), 'lastCommentId', 'c1')));
+await t('댓글 포함 메모 되돌리기(새로 쓰기) 성공', () => assertSucceeds(setDoc(mref(alice, 'm2'), memo('m2', { updatedAt: NOW, editedBy: '엄마', comments: { c1: cm('c1') } }))));
+const many = {}; for (let i = 0; i < 101; i++) many['k' + i] = cm('k' + i);
+await t('댓글 101개 메모 거부', () => assertFails(setDoc(mref(alice, 'm3'), memo('m3', { comments: many }))));
+await t('비멤버는 메모 읽기 불가(댓글 포함)', () => assertFails(getDoc(mref(mallory, 'm2'))));
+
 await t('다른 멤버가 쓴 메모도 삭제 성공', () => assertSucceeds(deleteDoc(doc(owner, 'families', FID, 'memos', 'm1'))));
 
 console.log('[관리자 권한]');
