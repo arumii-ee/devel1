@@ -11,6 +11,7 @@
  *  families/{familyId}                 { ownerUid, code, createdAt }
  *  families/{familyId}/members/{uid}   { name, joinedAt, code, lastSeen }
  *  families/{familyId}/items/{itemId}  재료
+ *  families/{familyId}/memos/{memoId}  메모 { id, text, createdAt, by }
  *  invites/{code}                      { familyId, createdAt }
  */
 (function (Fridge) {
@@ -27,6 +28,7 @@
   var SEEN_INTERVAL = DAY / 2; // 마지막 접속 시각은 12시간에 한 번만 기록
 
   var store = Fridge.storage;
+  var memos = Fridge.memos;
   var fb = null;          // { db, auth, uid }
   var fbPromise = null;
   var conn = null;        // 현재 연결 { familyId, name, unsubs[], adapter }
@@ -232,6 +234,46 @@
     };
   }
 
+  /* ---------- 메모 어댑터 (memos.js 와 같은 모양) ---------- */
+
+  function createMemoAdapter(fid, name, onDenied) {
+    var col = familyRef(fid).collection('memos');
+
+    function report(p) {
+      p.catch(function (e) {
+        if (e && e.code === 'permission-denied') onDenied(e);
+        else store.setStatus('error', e);
+      });
+      return Promise.resolve();
+    }
+
+    return {
+      name: 'family',
+      author: function () { return name; },
+      setName: function (n) { name = n; },
+      list: function () {
+        return col.get().then(function (snap) { return snap.docs.map(function (d) { return d.data(); }); });
+      },
+      add: function (memo) {
+        var data = {
+          id: memo.id, text: String(memo.text).slice(0, memos.TEXT_MAX),
+          createdAt: memo.createdAt, by: cleanName(memo.by) || name
+        };
+        return report(col.doc(memo.id).set(data));
+      },
+      remove: function (id) {
+        return report(col.doc(id).delete());
+      },
+      subscribe: function (cb) {
+        return col.onSnapshot(function (snap) {
+          cb(snap.docs.map(function (d) { return d.data(); }));
+        }, function (e) {
+          if (e && e.code === 'permission-denied') onDenied(e);
+        });
+      }
+    };
+  }
+
   /* ---------- 연결 / 끊기 ---------- */
 
   function detach() {
@@ -248,6 +290,7 @@
     info = null;
     save(null);
     store.use(store.local);
+    memos.use(memos.local);
     emitChange();
     Fridge.family.onRemoved && Fridge.family.onRemoved();
   }
@@ -271,6 +314,7 @@
     detach();
     store.setStatus('connecting');
     store.use(store.pending());
+    memos.use(memos.pending());
     return ensureFirebase().then(function () {
       var c = { familyId: fid, name: name, unsubs: [] };
       conn = c;
@@ -308,6 +352,8 @@
       touchSeen(fid);
 
       c.adapter = createFamilyAdapter(fid, name, denied);
+      c.memoAdapter = createMemoAdapter(fid, name, denied);
+      memos.use(c.memoAdapter);
       return store.use(c.adapter);
     }).catch(function (e) {
       store.setStatus('error', e);
@@ -448,6 +494,7 @@
   function leave() {
     if (!conn || !fb) {
       detach(); info = null; save(null);
+      memos.use(memos.local);
       return store.use(store.local).then(emitChange);
     }
     var c = conn;
@@ -461,7 +508,8 @@
     return withTimeout(Promise.all([
       fam.collection('members').get({ source: 'server' }),
       fam.get({ source: 'server' }),
-      col.get({ source: 'server' })
+      col.get({ source: 'server' }),
+      fam.collection('memos').get({ source: 'server' })
     ])).then(function (r) {
       var others = r[0].docs
         .filter(function (d) { return d.id !== fb.uid; })
@@ -477,8 +525,8 @@
         return withTimeout(fam.update({ ownerUid: others[0].uid }));
       }
       if (!others.length) {
-        // 정말 마지막 멤버일 때만: 재료와 초대 코드 삭제
-        var ops = r[2].docs.map(function (d) { return function (b) { b.delete(d.ref); }; });
+        // 정말 마지막 멤버일 때만: 재료 · 메모 · 초대 코드 삭제
+        var ops = r[2].docs.concat(r[3].docs).map(function (d) { return function (b) { b.delete(d.ref); }; });
         if (owner && famData.code) ops.push(function (b) { b.delete(inviteRef(famData.code)); });
         return commitInChunks(ops);
       }
@@ -506,6 +554,7 @@
       }
       return store.local.replaceAll(copy);
     }).then(function () {
+      memos.use(memos.local);
       return store.use(store.local);
     }).then(emitChange, function (e) {
       if (conn === c) {
@@ -524,6 +573,7 @@
     save(info);
     conn.name = name;
     if (conn.adapter && conn.adapter.setName) conn.adapter.setName(name);
+    if (conn.memoAdapter) conn.memoAdapter.setName(name);
     return withTimeout(familyRef(conn.familyId).collection('members').doc(fb.uid).update({ name: name }));
   }
 
