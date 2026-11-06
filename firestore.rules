@@ -2,7 +2,7 @@ rules_version = '2';
 // My Refrigerator - 가족 공유 보안 규칙
 // ---------------------------------------------------------------
 // - 모든 접근은 로그인(익명 로그인)이 필요합니다.
-// - 가족 냉장고의 재료와 메모는 "멤버 명단"에 있는 기기만 읽고 쓸 수 있습니다.
+// - 가족 냉장고의 재료와 메모(댓글 포함)는 "멤버 명단"에 있는 기기만 읽고 쓸 수 있습니다.
 // - 멤버가 되려면 현재 유효한 가족 코드(12자리)를 알아야 합니다.
 // - 관리자(만든 사람)는 멤버를 내보내고 코드를 바꿀 수 있습니다.
 // - 관리자가 30일 넘게 안 들어오면 다른 멤버가 관리자를 넘겨받을 수 있습니다.
@@ -55,14 +55,52 @@ service cloud.firestore {
         && d.createdAt is number && d.updatedAt is number
         && optionalName(d, 'addedBy') && optionalName(d, 'updatedBy');
     }
-    // 메모: 글 1~200자, 작성 시각은 미래(10분 넘게)로 못 씀, 작성자 이름 10자 이하
+    function notFuture(t) {
+      return t is number && t <= request.time.toMillis() + 600000;
+    }
+    function optionalTime(d, key) {
+      return !(key in d) || notFuture(d[key]);
+    }
+    // 메모: 글 1~200자, 시각은 미래(10분 넘게)로 못 씀, 이름 10자 이하, 댓글 100개 이하
     function validMemo(d, memoId) {
       return d.keys().hasAll(['id', 'text', 'createdAt', 'by'])
-        && d.keys().hasOnly(['id', 'text', 'createdAt', 'by'])
+        && d.keys().hasOnly(['id', 'text', 'createdAt', 'by', 'updatedAt', 'editedBy', 'comments', 'lastCommentId'])
         && d.id == memoId
         && d.text is string && d.text.size() > 0 && d.text.size() <= 200
-        && d.createdAt is number && d.createdAt <= request.time.toMillis() + 600000
-        && validName(d.by) && d.by.size() > 0;
+        && notFuture(d.createdAt)
+        && validName(d.by) && d.by.size() > 0
+        && optionalTime(d, 'updatedAt') && optionalName(d, 'editedBy')
+        && (!('comments' in d) || (d.comments is map && d.comments.size() <= 100))
+        && (!('lastCommentId' in d) || (d.lastCommentId is string && d.lastCommentId.size() > 0 && d.lastCommentId.size() <= 40));
+    }
+    // 댓글: 글 1~200자, 시각은 미래로 못 씀, 이름 10자 이하
+    function validComment(c, cid) {
+      return c is map
+        && c.keys().hasAll(['id', 'text', 'createdAt', 'by'])
+        && c.keys().hasOnly(['id', 'text', 'createdAt', 'by', 'updatedAt', 'editedBy'])
+        && c.id == cid
+        && c.text is string && c.text.size() > 0 && c.text.size() <= 200
+        && notFuture(c.createdAt)
+        && validName(c.by) && c.by.size() > 0
+        && optionalTime(c, 'updatedAt') && optionalName(c, 'editedBy');
+    }
+    // 메모 글 고치기: 글 · 고친 시각 · 고친 사람만 바꿀 수 있음 (남긴 사람 · 시각 · 댓글은 그대로)
+    function editsMemoText(before, after) {
+      return after.diff(before).affectedKeys().hasOnly(['text', 'updatedAt', 'editedBy'])
+        && after.diff(before).affectedKeys().hasAll(['updatedAt'])
+        && 'editedBy' in after;
+    }
+    // 댓글 달기 · 고치기 · 지우기: 한 번에 lastCommentId 로 밝힌 댓글 1개만 바꿀 수 있음
+    // 고칠 때는 댓글 남긴 사람 · 시각을 바꿀 수 없음
+    function changesOneComment(before, after) {
+      let cid = after.get('lastCommentId', '');
+      let was = before.get('comments', {});
+      let now = after.get('comments', {});
+      return after.diff(before).affectedKeys().hasOnly(['comments', 'lastCommentId'])
+        && cid != ''
+        && now.diff(was).affectedKeys().hasOnly([cid])
+        && (!(cid in now) || (validComment(now[cid], cid)
+          && (!(cid in was) || (now[cid].createdAt == was[cid].createdAt && now[cid].by == was[cid].by))));
     }
 
     // 초대 코드 → 가족 찾기. 코드를 정확히 알아야만 읽을 수 있고, 목록 보기는 불가
@@ -124,11 +162,14 @@ service cloud.firestore {
         allow create, update: if isMember(fid) && validItem(request.resource.data, itemId);
       }
 
-      // 메모: 멤버 누구나 쓰고 지울 수 있음. 남긴 메모는 고칠 수 없음(지우고 다시 쓰기)
+      // 메모와 댓글: 멤버 누구나 쓰고 · 고치고 · 지울 수 있음
+      // (댓글은 메모 문서의 comments 칸에 { 댓글 id: 댓글 } 으로 저장)
       match /memos/{memoId} {
         allow read, delete: if isMember(fid);
         allow create: if isMember(fid) && validMemo(request.resource.data, memoId);
-        allow update: if false;
+        allow update: if isMember(fid) && validMemo(request.resource.data, memoId)
+          && (editsMemoText(resource.data, request.resource.data)
+            || changesOneComment(resource.data, request.resource.data));
       }
     }
   }

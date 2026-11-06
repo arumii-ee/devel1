@@ -665,21 +665,20 @@ main { padding: 12px 16px; }
 .memo-count { color: var(--muted); font-size: 13px; }
 .memo-list { list-style: none; margin: 0; padding: 0; }
 .memo {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
   margin-bottom: 10px;
-  padding: 12px 6px 12px 14px;
+  padding: 12px 6px 10px 14px;
   background: var(--surface);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
 }
+.memo-head { display: flex; align-items: flex-start; gap: 4px; }
 .memo-main { flex: 1; min-width: 0; }
 .memo-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .memo-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 6px; color: var(--muted); font-size: 13px; }
 .memo-by { font-weight: 600; color: var(--primary); }
-.memo-del {
-  flex-shrink: 0;
+.memo-edited { font-style: italic; }
+.memo-tools { flex-shrink: 0; display: flex; margin-top: -6px; }
+.memo-icon {
   display: flex; align-items: center; justify-content: center;
   width: 40px; height: 40px;
   border: 0;
@@ -687,7 +686,68 @@ main { padding: 12px 16px; }
   background: none;
   color: var(--muted);
 }
+.memo-icon:active { background: var(--surface-2); color: var(--primary); }
 .memo-del:active { background: var(--expired-bg); color: var(--expired); }
+
+/* 고치기 칸 (메모 · 댓글) */
+.memo-edit textarea {
+  display: block;
+  width: 100%;
+  min-height: 60px;
+  padding: 10px 12px;
+  border: 1px solid var(--primary);
+  border-radius: 10px;
+  background: var(--surface);
+  resize: vertical;
+  outline: none;
+}
+.memo-edit-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; }
+.memo-edit-btns { display: flex; gap: 6px; }
+.memo-edit-btns .btn.primary { flex: 0 0 auto; }
+.memo.editing .memo-main, .comment.editing { padding-right: 8px; }
+
+/* 댓글 */
+.memo-foot { margin-top: 8px; padding-right: 8px; }
+.comments {
+  list-style: none;
+  margin: 0 0 6px;
+  padding: 2px 0 2px 12px;
+  border-left: 3px solid var(--primary-soft);
+}
+.comment { display: flex; align-items: flex-start; gap: 6px; padding: 6px 0; }
+.comment + .comment { border-top: 1px solid var(--line); }
+.comment-main { flex: 1; min-width: 0; }
+.comment-text { margin: 0; font-size: 15px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.comment-by { color: var(--primary); }
+.comment .memo-meta { margin-top: 2px; font-size: 12px; }
+.comment-tools { flex-shrink: 0; display: flex; gap: 2px; }
+.comment.editing { display: block; }
+.link-btn {
+  min-height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+.link-btn:active { background: var(--surface-2); }
+.link-btn.danger:active { background: var(--expired-bg); color: var(--expired); }
+.comment-open { margin-left: -8px; color: var(--primary); }
+.comment-form { display: flex; gap: 6px; }
+.comment-form input {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  outline: none;
+}
+.comment-form input:focus { border-color: var(--primary); }
+.comment-form .btn.primary { flex: 0 0 auto; }
 .memo-empty { margin: 40px 0; text-align: center; color: var(--muted); }
 
 /* 좁은 화면: 상단 버튼 3개가 들어가도록 */
