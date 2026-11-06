@@ -137,6 +137,7 @@
     var expired = 0, urgent = 0, soon = 0;
     state.items.forEach(function (it) {
       counts[it.location] = (counts[it.location] || 0) + 1;
+      if (it.quantity <= 0) return; // 다 떨어진 재료는 유통기한 경고에서 제외
       var s = I.status(it);
       if (s === 'expired') expired++;
       else if (s === 'urgent') urgent++;
@@ -388,6 +389,15 @@
       return;
     }
     var editing = !!state.editingId;
+    // 수정하는 동안 다른 기기(가족)에서 지워졌으면 새로 추가할지 물어봄
+    if (editing && !findItem(state.editingId)) {
+      if (!window.confirm('“' + f.name + '”은(는) 다른 곳에서 삭제된 재료예요.\n새로 추가할까요?')) {
+        closeSheet();
+        return;
+      }
+      state.editingId = null;
+      editing = false;
+    }
     var p, msg;
     var same = editing ? null : I.findSame(state.items, f);
     if (same && window.confirm('이미 있는 “' + same.name + '” ' + I.formatQty(same.quantity) + (same.unit || '') +

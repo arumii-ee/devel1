@@ -9,7 +9,7 @@
  *
  * 데이터 위치
  *  families/{familyId}                 { ownerUid, code, createdAt }
- *  families/{familyId}/members/{uid}   { name, joinedAt, code }
+ *  families/{familyId}/members/{uid}   { name, joinedAt, code, lastSeen }
  *  families/{familyId}/items/{itemId}  재료
  *  invites/{code}                      { familyId, createdAt }
  */
@@ -22,6 +22,9 @@
   var CODE_LENGTH = 12;
   var NAME_MAX = 10;
   var WRITE_TIMEOUT = 15000;
+  var DAY = 86400000;
+  var INACTIVE_DAYS = 30;   // 관리자가 이만큼 안 들어오면 다른 멤버가 관리자를 넘겨받음 (firestore.rules 와 같은 값)
+  var SEEN_INTERVAL = DAY / 2; // 마지막 접속 시각은 12시간에 한 번만 기록
 
   var store = Fridge.storage;
   var fb = null;          // { db, auth, uid }
@@ -280,6 +283,7 @@
         state.code = d.code;
         state.ownerUid = d.ownerUid;
         emitChange();
+        claimIfOwnerGone(c);
       }, function (e) { if (e.code === 'permission-denied') denied(e); }));
 
       // 내 멤버 문서: 관리자가 내보내도 이미 열린 실시간 연결은 권한 오류 없이 계속될 수 있어서
@@ -293,16 +297,54 @@
       c.unsubs.push(familyRef(fid).collection('members').onSnapshot(function (snap) {
         if (conn !== c) return;
         state.members = snap.docs.map(function (d) {
-          return { uid: d.id, name: d.data().name || '', joinedAt: d.data().joinedAt || 0 };
+          var v = d.data();
+          return { uid: d.id, name: v.name || '', joinedAt: v.joinedAt || 0, lastSeen: v.lastSeen || v.joinedAt || 0 };
         }).sort(function (a, b) { return a.joinedAt - b.joinedAt; });
+        if (!snap.metadata.fromCache) c.membersLoaded = true;
         emitChange();
+        claimIfOwnerGone(c);
       }, function (e) { if (e.code === 'permission-denied') denied(e); }));
+
+      touchSeen(fid);
 
       c.adapter = createFamilyAdapter(fid, name, denied);
       return store.use(c.adapter);
     }).catch(function (e) {
       store.setStatus('error', e);
       throw e;
+    });
+  }
+
+  // 마지막 접속 시각 기록 (관리자가 오래 안 들어왔는지 다른 가족이 알 수 있게)
+  function touchSeen(fid) {
+    if (!info || info.familyId !== fid) return;
+    var now = Date.now();
+    if (info.seenAt && now - info.seenAt < SEEN_INTERVAL) return;
+    familyRef(fid).collection('members').doc(fb.uid).update({ lastSeen: now }).then(function () {
+      if (info && info.familyId === fid) { info.seenAt = now; save(info); }
+    }, function () { /* 다음 실행 때 다시 */ });
+  }
+
+  function isInactive(m) {
+    return !m || Date.now() - (m.lastSeen || 0) > INACTIVE_DAYS * DAY;
+  }
+
+  // 관리자가 명단에 없거나 30일 넘게 안 들어왔으면(휴대폰 분실·앱 데이터 삭제 등) 내가 관리자를 넘겨받음
+  // 서버 규칙도 같은 조건을 검사하므로, 동시에 여러 명이 시도해도 한 명만 남음
+  function claimIfOwnerGone(c) {
+    if (conn !== c || c.leaving || c.claiming || !c.membersLoaded || !state.ownerUid) return;
+    if (state.ownerUid === fb.uid) return;
+    var me = null, owner = null;
+    state.members.forEach(function (m) {
+      if (m.uid === fb.uid) me = m;
+      if (m.uid === state.ownerUid) owner = m;
+    });
+    if (!me || !isInactive(owner)) return;
+    c.claiming = true;
+    withTimeout(familyRef(c.familyId).update({ ownerUid: fb.uid })).then(function () {
+      if (conn === c && Fridge.family.onBecameOwner) Fridge.family.onBecameOwner();
+    }, function () { /* 다른 멤버가 먼저 넘겨받았거나 오프라인 */ }).then(function () {
+      c.claiming = false;
     });
   }
 
@@ -501,6 +543,8 @@
     get info() { return info; },
     get state() { return state; },
     get isOwner() { return isOwner(); },
+    INACTIVE_DAYS: INACTIVE_DAYS,
+    isInactive: isInactive,
     formatCode: formatCode,
     normalizeCode: normalizeCode,
     create: create,
@@ -512,6 +556,7 @@
     retry: retry,
     onChange: function (cb) { listeners.push(cb); },
     onRemoved: null,
+    onBecameOwner: null,
     // 앱 시작 시 저장된 가족이 있으면 자동 연결
     start: function () {
       if (info && Fridge.family.configured && !Fridge.family.fileMode) {

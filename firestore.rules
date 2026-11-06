@@ -5,6 +5,7 @@ rules_version = '2';
 // - 가족 냉장고의 재료는 "멤버 명단"에 있는 기기만 읽고 쓸 수 있습니다.
 // - 멤버가 되려면 현재 유효한 가족 코드(12자리)를 알아야 합니다.
 // - 관리자(만든 사람)는 멤버를 내보내고 코드를 바꿀 수 있습니다.
+// - 관리자가 30일 넘게 안 들어오면 다른 멤버가 관리자를 넘겨받을 수 있습니다.
 // - 저장되는 데이터는 칸 이름·종류·길이를 엄격하게 검사합니다.
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -27,6 +28,12 @@ service cloud.firestore {
         && family(fid).ownerUid == request.auth.uid;
     }
     // 헷갈리는 글자(I, L, O, 0, 1)를 뺀 12자리
+    // 관리자가 30일 넘게 안 들어왔거나 멤버 명단에 없으면(앱 데이터 삭제 등) 다른 멤버가 넘겨받을 수 있음
+    function ownerGone(fid, ownerUid) {
+      let path = /databases/$(database)/documents/families/$(fid)/members/$(ownerUid);
+      return !exists(path)
+        || get(path).data.get('lastSeen', get(path).data.get('joinedAt', 0)) < request.time.toMillis() - 2592000000;
+    }
     function validCode(c) {
       return c is string && c.matches('^[ABCDEFGHJKMNPQRSTUVWXYZ2-9]{12}$');
     }
@@ -71,12 +78,16 @@ service cloud.firestore {
         && validCode(request.resource.data.code)
         && request.resource.data.createdAt is number;
       // 관리자만: 코드 바꾸기, 또는 다른 멤버에게 관리자 넘기기
-      allow update: if isOwner(fid) && (
+      // 관리자가 사라진 경우: 멤버가 자기 자신을 새 관리자로
+      allow update: if (isOwner(fid) && (
         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['code'])
           && validCode(request.resource.data.code))
         || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ownerUid'])
           && exists(/databases/$(database)/documents/families/$(fid)/members/$(request.resource.data.ownerUid)))
-      );
+      )) || (isMember(fid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ownerUid'])
+        && request.resource.data.ownerUid == request.auth.uid
+        && ownerGone(fid, resource.data.ownerUid));
 
       match /members/{uid} {
         allow get: if signedIn() && (request.auth.uid == uid || isMember(fid));
@@ -88,10 +99,13 @@ service cloud.firestore {
           && validName(request.resource.data.name)
           && request.resource.data.joinedAt is number
           && request.resource.data.code == family(fid).code;
-        // 본인 이름만 수정
+        // 본인 이름 · 마지막 접속 시각(lastSeen)만 수정
         allow update: if signedIn() && request.auth.uid == uid
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name'])
-          && validName(request.resource.data.name);
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'lastSeen'])
+          && validName(request.resource.data.name)
+          && (!('lastSeen' in request.resource.data)
+            || (request.resource.data.lastSeen is number
+              && request.resource.data.lastSeen <= request.time.toMillis() + 600000));
         // 본인 탈퇴, 또는 관리자가 내보내기
         allow delete: if signedIn() && (request.auth.uid == uid || isOwner(fid));
       }

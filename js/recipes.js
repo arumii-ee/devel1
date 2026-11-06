@@ -32,7 +32,7 @@
     if (r.not && r.not.some(function (w) { return n.indexOf(w) !== -1; })) return false;
     return r.kw.some(function (w) {
       w = normalize(w);
-      return w.length === 1 ? n === w : n.indexOf(w) !== -1;
+      return w.length === 1 && !r.partial ? n === w : n.indexOf(w) !== -1;
     });
   }
 
