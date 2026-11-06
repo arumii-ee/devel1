@@ -207,6 +207,11 @@
     }
   }
 
+  // 겹친 화면이 모두 닫혔을 때만 뒤 화면 스크롤 잠금 해제 (hide 는 overlays 에서 빠진 뒤 불림)
+  function unlockScroll() {
+    if (!overlays.length) document.body.classList.remove('no-scroll');
+  }
+
   window.addEventListener('popstate', function () {
     var top = overlays.pop();
     if (top) top.hide();
@@ -243,7 +248,7 @@
   function hideSheet() {
     els.backdrop.classList.remove('show');
     els.sheet.classList.remove('show');
-    if (overlays.length <= 1) document.body.classList.remove('no-scroll');
+    unlockScroll();
     if (document.activeElement) document.activeElement.blur();
     setTimeout(function () {
       if (!els.sheet.classList.contains('show')) {
@@ -276,7 +281,7 @@
 
   function hideRecipes() {
     els.recipePanel.classList.remove('show');
-    document.body.classList.remove('no-scroll');
+    unlockScroll();
     setTimeout(function () {
       if (!els.recipePanel.classList.contains('show')) els.recipePanel.hidden = true;
     }, 220);
@@ -454,11 +459,16 @@
       editing = false;
     }
     var p, msg;
-    var same = editing ? null : I.findSame(state.items, f);
+    // 같은 이름·위치·단위의 재료가 있으면 합칠지 물어봄 (수정할 때는 고치는 재료 자신은 빼고 찾음)
+    var editId = state.editingId;
+    var others = editing ? state.items.filter(function (it) { return it.id !== editId; }) : state.items;
+    var same = I.findSame(others, f);
     if (same && window.confirm('이미 있는 “' + same.name + '” ' + I.formatQty(same.quantity) + (same.unit || '') +
-        '에 수량을 더할까요?\n[취소]를 누르면 따로 추가해요.')) {
+        '에 수량을 더할까요?\n[취소]를 누르면 따로 ' + (editing ? '둬요.' : '추가해요.'))) {
       var m = I.mergedFields(same, f);
       p = store.update(same.id, m, { readd: true });
+      // 수정하던 재료는 합쳐졌으므로 지움
+      if (editing) p = p.then(function () { return store.remove(editId); });
       msg = '“' + same.name + '”에 합쳤어요 · ' + I.formatQty(m.quantity) + (same.unit || '');
     } else if (editing) {
       p = store.update(state.editingId, f);
@@ -750,6 +760,7 @@
     render: render,
     openOverlay: openOverlay,
     closeOverlay: closeOverlay,
+    unlockScroll: unlockScroll,
     openAdd: function () { openSheet(null); },
     openRecipes: openRecipes
   };

@@ -253,7 +253,7 @@
 
   function hide() {
     els.panel.classList.remove('show');
-    document.body.classList.remove('no-scroll');
+    ui.unlockScroll();
     if (document.activeElement) document.activeElement.blur();
     editing = null;
     replyOpen = {};
