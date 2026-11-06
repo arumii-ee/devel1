@@ -2,7 +2,7 @@
  * 서비스 워커: 앱 파일을 휴대폰에 저장해 두고 인터넷 없이도 실행되게 합니다.
  * 인터넷이 되면 항상 최신 파일을 받으므로, 앱을 고쳐 GitHub에 올리면 다음 실행부터 바로 반영됩니다.
  */
-var CACHE_VERSION = 'fridge-v9';
+var CACHE_VERSION = 'fridge-v10';
 var NETWORK_TIMEOUT = 3000; // 이 시간 안에 응답이 없으면 저장해 둔 파일로 먼저 실행
 
 var APP_FILES = [

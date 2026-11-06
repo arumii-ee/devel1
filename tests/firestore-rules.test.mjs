@@ -60,6 +60,7 @@ await t('올바른 코드로 가입 성공', () => assertSucceeds(setDoc(doc(ali
 await t('멤버는 재료 쓰기 성공', () => assertSucceeds(setDoc(doc(alice, 'families', FID, 'items', 'a1'), item('a1', { addedBy: '아빠' }))));
 await t('멤버는 재료 읽기 성공', () => assertSucceeds(getDocs(collection(alice, 'families', FID, 'items'))));
 await t('멤버는 수량 수정 성공', () => assertSucceeds(updateDoc(doc(alice, 'families', FID, 'items', 'a1'), { quantity: 2, updatedAt: 3, updatedBy: '아빠' })));
+await t('합칠 때 등록한 사람 변경 성공', () => assertSucceeds(updateDoc(doc(alice, 'families', FID, 'items', 'a1'), { quantity: 3, updatedAt: 4, updatedBy: '엄마', addedBy: '엄마' })));
 
 console.log('[데이터 검사]');
 const bad = { '이름 41자': item('b', { name: 'x'.repeat(41) }), '빈 이름': item('b', { name: '' }), '음수 수량': item('b', { quantity: -1 }),

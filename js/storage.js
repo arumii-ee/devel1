@@ -2,7 +2,8 @@
  * 저장소
  * ---------------------------------------------------------------
  * 앱은 Fridge.storage 하나만 사용합니다:
- *   list() / add(item) / update(id, patch) / remove(id) / replaceAll(items) / subscribe(cb)
+ *   list() / add(item) / update(id, patch, opts) / remove(id) / replaceAll(items) / subscribe(cb)
+ *   update 의 opts.readd : 같은 재료를 다시 등록해 합친 것 → 가족 공유 중엔 등록한 사람(addedBy)을 지금 사람으로
  * 실제 저장 위치(어댑터)는 바꿔 끼울 수 있습니다.
  *   - local  : 이 기기 브라우저(localStorage)
  *   - family : 가족 공유(Firebase Firestore, js/family.js 에서 연결)
@@ -128,7 +129,7 @@
 
     list: function () { return current.list(); },
     add: function (item) { return current.add(item); },
-    update: function (id, patch) { return current.update(id, patch); },
+    update: function (id, patch, opts) { return current.update(id, patch, opts); },
     remove: function (id) { return current.remove(id); },
     replaceAll: function (items) { return current.replaceAll(items); },
 
