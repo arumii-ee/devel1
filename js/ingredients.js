@@ -67,6 +67,9 @@
       var sa = STATUS_ORDER[status(a)];
       var sb = STATUS_ORDER[status(b)];
       if (sa !== sb) return sa - sb;
+      // 같은 상태 안에서는 다 떨어진(수량 0) 재료를 아래로
+      var oa = a.quantity <= 0 ? 1 : 0, ob = b.quantity <= 0 ? 1 : 0;
+      if (oa !== ob) return oa - ob;
       if (a.expiry && b.expiry && a.expiry !== b.expiry) return a.expiry < b.expiry ? -1 : 1;
       return a.name.localeCompare(b.name, 'ko');
     });

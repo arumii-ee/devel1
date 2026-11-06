@@ -261,6 +261,7 @@
       li.appendChild(nm);
       if (m.uid === F.state.ownerUid) li.appendChild(el('span', 'tag', '관리자'));
       if (m.uid === F.state.uid) li.appendChild(el('span', 'tag me', '나'));
+      else if (F.isInactive(m)) li.appendChild(el('span', 'tag idle', F.INACTIVE_DAYS + '일 넘게 안 씀'));
       if (F.isOwner && m.uid !== F.state.uid) {
         var kb = button('내보내기', 'small danger', function () {
           if (!window.confirm('“' + (m.name || '이름 없음') + '”을(를) 가족 냉장고에서 내보낼까요?\n내보내면 다시 들어오지 못하도록 가족 코드도 바뀌어요.')) return;
@@ -274,7 +275,7 @@
     mc.appendChild(ul);
     mc.appendChild(el('p', 'fam-note', F.isOwner
       ? '관리자는 멤버를 내보내고 코드를 바꿀 수 있어요. 휴대폰을 잃어버렸다면 그 기기를 내보내세요.'
-      : '멤버 관리는 관리자만 할 수 있어요.'));
+      : '멤버 관리는 관리자만 할 수 있어요. 관리자가 ' + F.INACTIVE_DAYS + '일 넘게 안 쓰면 다른 가족에게 자동으로 넘어가요.'));
     body.appendChild(mc);
 
     var name = nameField();
@@ -349,6 +350,9 @@
   });
 
   F.onChange(renderStatus);
+  F.onBecameOwner = function () {
+    ui.toast('관리자가 오래 접속하지 않아 내가 관리자가 됐어요');
+  };
   F.onRemoved = function () {
     ui.toast('가족 냉장고에서 나가졌어요. 이제 이 기기에만 저장돼요');
     renderStatus();
