@@ -8,7 +8,7 @@
   <meta name="description" content="냉장고 재료와 유통기한을 관리하는 앱">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com http://127.0.0.1:* http://localhost:*; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'">
   <meta name="referrer" content="strict-origin-when-cross-origin">
-  <title>My Refrigerator</title>
+  <title>냉장고</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="icon" href="icons/favicon-32.png" type="image/png" sizes="32x32">
@@ -21,7 +21,7 @@
   <div class="app">
     <header class="top">
       <div class="top-row">
-        <h1>🧊 My Refrigerator</h1>
+        <h1><img src="icon.svg" class="brand-icon" alt="" width="24" height="24">냉장고</h1>
         <div class="top-actions">
           <button type="button" class="icon-btn" id="familyBtn" aria-label="가족 공유">
             <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="9" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 19c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="17" cy="9" r="2.4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16.5 14c2.6.2 4.5 2 4.5 4.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
@@ -40,7 +40,15 @@
       </div>
       <button type="button" class="sync-line" id="syncLine" hidden></button>
       <button type="button" class="alert-banner" id="alertBanner" hidden></button>
-      <input type="search" id="search" class="search" placeholder="재료 검색 (초성도 돼요: ㅇㅇ)" autocomplete="off" aria-label="재료 검색">
+      <div class="search-row">
+        <input type="search" id="search" class="search" placeholder="검색 (초성: ㅇㅇ)" autocomplete="off" aria-label="재료 검색">
+        <select id="sortBy" class="sort" aria-label="정렬 기준">
+          <option value="expiry">유통기한순</option>
+          <option value="name">이름순</option>
+          <option value="created">등록순</option>
+        </select>
+        <button type="button" id="sortDir" class="sort-dir" aria-label="오름차순 (누르면 내림차순)" title="오름차순 (누르면 내림차순)">↑</button>
+      </div>
       <nav class="tabs" role="tablist" aria-label="보관 위치">
         <button type="button" role="tab" class="tab is-active" data-filter="all" aria-selected="true">전체 <b data-count="all">0</b></button>
         <button type="button" role="tab" class="tab" data-filter="fridge" aria-selected="false">❄️ 냉장 <b data-count="fridge">0</b></button>

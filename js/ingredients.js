@@ -62,17 +62,46 @@
     return 'D-' + d;
   }
 
-  function sort(items) {
-    return items.slice().sort(function (a, b) {
-      var sa = STATUS_ORDER[status(a)];
-      var sb = STATUS_ORDER[status(b)];
-      if (sa !== sb) return sa - sb;
-      // 같은 상태 안에서는 다 떨어진(수량 0) 재료를 아래로
-      var oa = a.quantity <= 0 ? 1 : 0, ob = b.quantity <= 0 ? 1 : 0;
-      if (oa !== ob) return oa - ob;
-      if (a.expiry && b.expiry && a.expiry !== b.expiry) return a.expiry < b.expiry ? -1 : 1;
-      return a.name.localeCompare(b.name, 'ko');
-    });
+  // 유통기한순: 지남 → 임박 → 곧 → 여유 → 기한 없음
+  function byExpiry(a, b) {
+    var sa = STATUS_ORDER[status(a)];
+    var sb = STATUS_ORDER[status(b)];
+    if (sa !== sb) return sa - sb;
+    // 같은 상태 안에서는 다 떨어진(수량 0) 재료를 아래로
+    var oa = a.quantity <= 0 ? 1 : 0, ob = b.quantity <= 0 ? 1 : 0;
+    if (oa !== ob) return oa - ob;
+    if (a.expiry && b.expiry && a.expiry !== b.expiry) return a.expiry < b.expiry ? -1 : 1;
+    return byName(a, b);
+  }
+
+  function byName(a, b) {
+    return String(a.name || '').localeCompare(String(b.name || ''), 'ko');
+  }
+
+  // 이름순: 가나다, 이름이 같으면 유통기한 빠른 순
+  function byNameThenExpiry(a, b) {
+    var c = byName(a, b);
+    if (c) return c;
+    if (a.expiry === b.expiry) return 0;
+    if (!a.expiry) return 1;
+    if (!b.expiry) return -1;
+    return a.expiry < b.expiry ? -1 : 1;
+  }
+
+  // 등록순: 먼저 등록한 재료부터
+  function byCreated(a, b) {
+    var d = (a.createdAt || 0) - (b.createdAt || 0);
+    return d || byName(a, b);
+  }
+
+  var COMPARATORS = { expiry: byExpiry, name: byNameThenExpiry, created: byCreated };
+  var SORT_BY = ['expiry', 'name', 'created'];
+
+  // by: 'expiry'(기본) | 'name' | 'created', dir: 'asc'(기본) | 'desc'
+  function sort(items, by, dir) {
+    var cmp = COMPARATORS[by] || byExpiry;
+    var sign = dir === 'desc' ? -1 : 1;
+    return items.slice().sort(function (a, b) { return sign * cmp(a, b); });
   }
 
   function newId() {
@@ -165,6 +194,7 @@
     daysLeft: daysLeft,
     dday: dday,
     sort: sort,
+    SORT_BY: SORT_BY,
     addDays: addDays,
     formatQty: formatQty,
     MAX_QTY: MAX_QTY,

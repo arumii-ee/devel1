@@ -11,6 +11,8 @@
     items: [],
     filter: 'all',
     query: '',
+    sortBy: 'expiry',
+    sortDir: 'asc',
     editingId: null
   };
 
@@ -18,6 +20,7 @@
   var els = {
     list: $('list'), empty: $('empty'), emptyText: $('emptyText'),
     banner: $('alertBanner'), search: $('search'),
+    sortBy: $('sortBy'), sortDir: $('sortDir'),
     addBtn: $('addBtn'), sheet: $('sheet'), backdrop: $('backdrop'),
     form: $('form'), title: $('sheetTitle'), name: $('fName'), nameError: $('nameError'),
     qty: $('fQty'), unit: $('fUnit'), expiry: $('fExpiry'),
@@ -31,7 +34,7 @@
 
   function visibleItems() {
     var q = state.query.trim();
-    return I.sort(state.items).filter(function (it) {
+    return I.sort(state.items, state.sortBy, state.sortDir).filter(function (it) {
       if (state.filter !== 'all' && it.location !== state.filter) return false;
       if (q && !I.matchesQuery(it.name, q)) return false;
       return true;
@@ -525,6 +528,50 @@
     });
     render();
   });
+
+  /* ---------- 정렬 (이 기기에만 기억) ---------- */
+
+  var SORT_KEY = 'fridge-app:sort';
+
+  function loadSort() {
+    try {
+      var s = JSON.parse(window.localStorage.getItem(SORT_KEY) || 'null');
+      if (s && I.SORT_BY.indexOf(s.by) !== -1) state.sortBy = s.by;
+      if (s && (s.dir === 'asc' || s.dir === 'desc')) state.sortDir = s.dir;
+    } catch (e) { /* 기본값 사용 */ }
+  }
+
+  function saveSort() {
+    try {
+      window.localStorage.setItem(SORT_KEY, JSON.stringify({ by: state.sortBy, dir: state.sortDir }));
+    } catch (e) { /* 저장 못 해도 이번 화면에서는 적용 */ }
+  }
+
+  function showSort() {
+    els.sortBy.value = state.sortBy;
+    var desc = state.sortDir === 'desc';
+    els.sortDir.textContent = desc ? '↓' : '↑';
+    var label = (desc ? '내림차순' : '오름차순') + ' (누르면 ' + (desc ? '오름차순' : '내림차순') + ')';
+    els.sortDir.setAttribute('aria-label', label);
+    els.sortDir.title = label;
+  }
+
+  els.sortBy.addEventListener('change', function () {
+    state.sortBy = I.SORT_BY.indexOf(els.sortBy.value) !== -1 ? els.sortBy.value : 'expiry';
+    saveSort();
+    showSort();
+    render();
+  });
+
+  els.sortDir.addEventListener('click', function () {
+    state.sortDir = state.sortDir === 'desc' ? 'asc' : 'desc';
+    saveSort();
+    showSort();
+    render();
+  });
+
+  loadSort();
+  showSort();
 
   els.search.addEventListener('input', function () {
     state.query = els.search.value;
