@@ -59,6 +59,7 @@
 
     <main>
       <ul class="list" id="list" aria-label="재료 목록"></ul>
+      <button type="button" class="btn ghost block cleanup-btn" id="cleanupBtn" hidden></button>
       <div class="empty" id="empty" hidden>
         <div class="empty-icon">🥕</div>
         <p id="emptyText">아직 등록된 재료가 없어요.<br>아래 <b>+</b> 버튼으로 추가해 보세요.</p>
@@ -163,8 +164,12 @@
         <h2 id="memoTitle">메모</h2>
         <p class="panel-sub" id="memoSub"></p>
       </div>
+      <nav class="rtabs" id="memoTabs" role="tablist" aria-label="메모 · 장보기">
+        <button type="button" role="tab" class="rtab is-active" data-tab="memo" aria-selected="true" aria-controls="memoTab">메모</button>
+        <button type="button" role="tab" class="rtab" data-tab="shop" aria-selected="false" aria-controls="shopTab">장보기 <b id="shopCount">0</b></button>
+      </nav>
     </header>
-    <div class="panel-body">
+    <div class="panel-body" id="memoTab" role="tabpanel">
       <form class="memo-form" id="memoForm" novalidate>
         <textarea id="memoText" maxlength="200" rows="3" placeholder="예: 우유 사 오기, 계란 내일까지 먹기" aria-label="메모 내용"></textarea>
         <div class="memo-form-row">
@@ -175,23 +180,36 @@
       <ul class="memo-list" id="memoList" aria-label="메모 목록"></ul>
       <p class="memo-empty" id="memoEmpty" hidden>아직 남긴 메모가 없어요.</p>
     </div>
+    <div class="panel-body" id="shopTab" role="tabpanel" hidden>
+      <form class="shop-form" id="shopForm" novalidate>
+        <input type="text" id="shopText" maxlength="40" placeholder="살 것 (예: 우유 1L)" autocomplete="off" enterkeyhint="done" aria-label="살 것">
+        <button type="submit" class="btn primary" id="shopSave">추가</button>
+      </form>
+      <ul class="shop-list" id="shopList" aria-label="장보기 목록"></ul>
+      <p class="memo-empty" id="shopEmpty" hidden>살 것이 없어요.<br>위 칸에 적거나, 다 떨어진 재료에서 <b>장보기 추가</b>를 눌러 보세요.</p>
+      <button type="button" class="btn ghost block shop-clear" id="shopClear" hidden>산 것 지우기</button>
+    </div>
   </section>
 
   <div class="toast" id="toast" role="status" hidden>
     <span id="toastText"></span>
     <button type="button" id="toastAction" hidden>실행 취소</button>
+    <button type="button" id="toastAction2" hidden></button>
   </div>
 
   <script src="js/storage.js"></script>
   <script src="js/ingredients.js"></script>
   <script src="js/memos.js"></script>
+  <script src="js/shopping.js"></script>
   <script src="js/firebase-config.js"></script>
   <script src="js/family.js"></script>
   <script src="js/recipe-data.js"></script>
   <script src="js/recipes.js"></script>
   <script src="js/app.js"></script>
   <script src="js/family-ui.js"></script>
+  <script src="js/backup.js"></script>
   <script src="js/memo-ui.js"></script>
+  <script src="js/shopping-ui.js"></script>
   <script src="js/pwa.js"></script>
 </body>
 </html>

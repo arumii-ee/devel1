@@ -306,9 +306,9 @@ main { padding: 12px 16px; }
 }
 .fab:active { transform: scale(.95); }
 
-/* ===== 바텀시트 ===== */
+/* ===== 바텀시트 ===== (장보기 화면 위에서도 열리도록 화면(panel)보다 위) */
 .sheet-backdrop {
-  position: fixed; inset: 0; z-index: 10;
+  position: fixed; inset: 0; z-index: 16;
   background: rgba(0,0,0,.4);
   opacity: 0; transition: opacity .2s;
 }
@@ -317,7 +317,7 @@ main { padding: 12px 16px; }
 .sheet {
   position: fixed;
   left: 0; right: 0; bottom: 0;
-  z-index: 11;
+  z-index: 17;
   max-width: 560px;
   max-height: 92vh;
   margin: 0 auto;
@@ -794,6 +794,72 @@ main { padding: 12px 16px; }
 .comment-form input:focus { border-color: var(--primary); }
 .comment-form .btn.primary { flex: 0 0 auto; }
 .memo-empty { margin: 40px 0; text-align: center; color: var(--muted); }
+
+/* ===== 장보기 ===== */
+.shop-form { display: flex; gap: 8px; margin: 14px 0 16px; }
+.shop-form input {
+  flex: 1;
+  min-width: 0;
+  height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  outline: none;
+}
+.shop-form input:focus { border-color: var(--primary); }
+.shop-form .btn.primary { flex: 0 0 auto; height: 48px; padding: 0 20px; }
+.shop-list { list-style: none; margin: 0; padding: 0; }
+.shop {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 8px;
+  padding: 4px 6px 4px 4px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.shop-check {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 4px 6px;
+  cursor: pointer;
+}
+.shop-check input { flex-shrink: 0; width: 22px; height: 22px; margin: 0; accent-color: var(--primary); }
+.shop-main { min-width: 0; }
+.shop-name { display: block; overflow-wrap: anywhere; }
+.shop-meta { display: block; color: var(--muted); font-size: 12px; margin-top: 1px; }
+.shop.done .shop-name { text-decoration: line-through; color: var(--muted); }
+.shop.done { opacity: .75; box-shadow: none; }
+.shop-edit { flex: 1; display: flex; gap: 6px; padding: 6px; }
+.shop-edit input {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--primary);
+  border-radius: 10px;
+  background: var(--surface);
+  outline: none;
+}
+.shop-edit .btn.primary { flex: 0 0 auto; }
+.shop-divider { margin: 18px 4px 8px; color: var(--muted); font-size: 13px; font-weight: 600; list-style: none; }
+.shop-clear { margin-top: 12px; }
+
+/* 다 떨어진 재료 정리 버튼 */
+.cleanup-btn { margin-top: 14px; height: 44px; font-size: 15px; color: var(--muted); }
+
+/* 토스트 버튼 두 개 */
+.toast #toastAction2 { margin-left: -4px; }
+
+/* 백업 (가족 공유 화면 맨 아래) */
+.backup { margin-top: 28px; padding-top: 8px; border-top: 1px solid var(--line); }
+.backup-file { display: none; }
 
 /* 좁은 화면: 상단 버튼 3개가 들어가도록 */
 @media (max-width: 380px) {

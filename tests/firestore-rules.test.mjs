@@ -1,5 +1,5 @@
 /*
- * Firestore 보안 규칙 테스트 (공격 시나리오 128개)
+ * Firestore 보안 규칙 테스트 (공격 시나리오 164개)
  * ---------------------------------------------------------------
  * firestore.rules 를 고친 뒤 아래처럼 실행해 모두 통과하는지 확인하세요. (Node.js, Java 필요)
  *
@@ -54,6 +54,7 @@ await t('비로그인은 재료 읽기 불가', () => assertFails(getDocs(collec
 console.log('[가입]');
 await t('틀린 코드로 가입 불가', () => assertFails(setDoc(doc(mallory, 'families', FID, 'members', 'mallory'), { name: 'x', joinedAt: NOW + 1, code: CODE2 })));
 await t('남의 uid로 가입 불가', () => assertFails(setDoc(doc(mallory, 'families', FID, 'members', 'alice'), { name: 'x', joinedAt: NOW + 1, code: CODE })));
+await t('가입 시각 먼 미래 불가', () => assertFails(setDoc(doc(alice, 'families', FID, 'members', 'alice'), { name: '아빠', joinedAt: Date.now() + 86400000, code: CODE })));
 await t('이름 11자 이상 불가', () => assertFails(setDoc(doc(alice, 'families', FID, 'members', 'alice'), { name: '가나다라마바사아자차카', joinedAt: NOW + 1, code: CODE })));
 await t('올바른 코드로 초대 조회 성공', () => assertSucceeds(getDoc(doc(alice, 'invites', CODE))));
 await t('올바른 코드로 가입 성공', () => assertSucceeds(setDoc(doc(alice, 'families', FID, 'members', 'alice'), { name: '아빠', joinedAt: NOW + 2, code: CODE })));
@@ -69,6 +70,9 @@ const bad = { '이름 41자': item('b', { name: 'x'.repeat(41) }), '빈 이름':
   '문서 id 불일치': item('other'), '필수 칸 없음': { id: 'b', name: '우유' }, 'addedBy 11자': item('b', { addedBy: 'x'.repeat(11) }) };
 for (const [k, v] of Object.entries(bad)) await t(`${k} 거부`, () => assertFails(setDoc(doc(alice, 'families', FID, 'items', 'b'), v)));
 await t('수정으로 이상한 칸 추가 거부', () => assertFails(updateDoc(doc(alice, 'families', FID, 'items', 'a1'), { hack: 1 })));
+await t('재료 등록 시각 먼 미래 거부', () => assertFails(setDoc(doc(alice, 'families', FID, 'items', 'f1'), item('f1', { createdAt: Date.now() + 86400000, updatedAt: 1 }))));
+await t('재료 고친 시각 먼 미래 거부', () => assertFails(updateDoc(doc(alice, 'families', FID, 'items', 'a1'), { quantity: 1, updatedAt: Date.now() + 86400000 })));
+await t('예전 재료(등록 시각 검사 없음)도 수정 성공', () => assertSucceeds(updateDoc(doc(alice, 'families', FID, 'items', 'a1'), { quantity: 4, updatedAt: Date.now() })));
 
 console.log('[메모]');
 const memo = (id, extra = {}) => ({ id, text: '우유 사 오기', createdAt: NOW, by: '아빠', ...extra });
@@ -123,6 +127,30 @@ await t('비멤버는 메모 읽기 불가(댓글 포함)', () => assertFails(ge
 
 await t('다른 멤버가 쓴 메모도 삭제 성공', () => assertSucceeds(deleteDoc(doc(owner, 'families', FID, 'memos', 'm1'))));
 
+console.log('[장보기]');
+const shop = (id, extra = {}) => ({ id, name: '우유 1L', done: false, createdAt: NOW, by: '아빠', ...extra });
+const sref = (c, id = 's1') => doc(c, 'families', FID, 'shopping', id);
+await t('멤버는 장보기 넣기 성공', () => assertSucceeds(setDoc(sref(alice), shop('s1'))));
+await t('멤버는 장보기 읽기 성공', () => assertSucceeds(getDocs(collection(alice, 'families', FID, 'shopping'))));
+await t('비멤버는 장보기 읽기 불가', () => assertFails(getDocs(collection(mallory, 'families', FID, 'shopping'))));
+await t('비멤버는 장보기 넣기 불가', () => assertFails(setDoc(sref(mallory, 'sx'), shop('sx'))));
+await t('비멤버는 장보기 체크 불가', () => assertFails(updateDoc(sref(mallory), { done: true })));
+await t('비멤버는 장보기 지우기 불가', () => assertFails(deleteDoc(sref(mallory))));
+await t('다른 멤버가 산 것으로 체크 성공', () => assertSucceeds(updateDoc(sref(owner), { done: true, doneAt: NOW, doneBy: '엄마' })));
+await t('체크 풀기 성공', () => assertSucceeds(updateDoc(sref(alice), { done: false })));
+await t('이름 고치기 성공', () => assertSucceeds(updateDoc(sref(alice), { name: '우유 2L' })));
+await t('남긴 사람 바꾸기 불가', () => assertFails(updateDoc(sref(alice), { by: '엄마' })));
+await t('남긴 시각 바꾸기 불가', () => assertFails(updateDoc(sref(alice), { createdAt: 1 })));
+await t('수정으로 이상한 칸 추가 불가', () => assertFails(updateDoc(sref(alice), { done: true, hack: 1 })));
+await t('수정으로 빈 이름 불가', () => assertFails(updateDoc(sref(alice), { name: '' })));
+await t('미래 체크 시각 불가', () => assertFails(updateDoc(sref(alice), { done: true, doneAt: Date.now() + 86400000 })));
+const badShop = { '빈 이름': shop('sb', { name: '' }), '이름 41자': shop('sb', { name: 'x'.repeat(41) }), '이름이 숫자': shop('sb', { name: 1 }),
+  'done 문자': shop('sb', { done: 'yes' }), 'done 없음': { id: 'sb', name: 'x', createdAt: NOW, by: '아빠' }, '작성자 11자': shop('sb', { by: 'x'.repeat(11) }),
+  '빈 작성자': shop('sb', { by: '' }), '미래 시각': shop('sb', { createdAt: Date.now() + 86400000 }), '허용 안 된 칸': shop('sb', { hack: 1 }),
+  '문서 id 불일치': shop('other'), '산 사람 11자': shop('sb', { done: true, doneBy: 'x'.repeat(11) }) };
+for (const [k, v] of Object.entries(badShop)) await t(`장보기 ${k} 거부`, () => assertFails(setDoc(sref(alice, 'sb'), v)));
+await t('다른 멤버가 넣은 장보기 지우기 성공', () => assertSucceeds(deleteDoc(sref(owner))));
+
 console.log('[관리자 권한]');
 await t('멤버는 코드 바꾸기 불가', () => assertFails(updateDoc(doc(alice, 'families', FID), { code: CODE2 })));
 await t('멤버는 관리자 가로채기 불가', () => assertFails(updateDoc(doc(alice, 'families', FID), { ownerUid: 'alice' })));
@@ -135,10 +163,21 @@ await t('관리자를 멤버 아닌 사람에게 넘기기 불가', () => assert
 await t('관리자: 코드와 관리자 동시 변경 불가', () => assertFails(updateDoc(doc(owner, 'families', FID), { code: CODE2, ownerUid: 'alice' })));
 
 console.log('[내보내기 · 코드 바꾸기]');
-// mallory가 옛 코드를 알고 가입한 상황
+// mallory가 옛 코드를 알고 가입한 상황. 앱(kick)과 같은 순서: 코드 변경 + 내보내기를 한 번에 → 새 초대 코드 등록
 await t('(준비) mallory 가입', () => assertSucceeds(setDoc(doc(mallory, 'families', FID, 'members', 'mallory'), { name: '?', joinedAt: NOW + 3, code: CODE })));
-await t('관리자: mallory 내보내기 성공', () => assertSucceeds(deleteDoc(doc(owner, 'families', FID, 'members', 'mallory'))));
-await t('관리자: 코드 바꾸기 성공', () => assertSucceeds(updateDoc(doc(owner, 'families', FID), { code: CODE2 })));
+await t('멤버는 코드 변경 + 내보내기 한 번에 불가', () => {
+  const b = writeBatch(alice);
+  b.update(doc(alice, 'families', FID), { code: CODE2 });
+  b.delete(doc(alice, 'families', FID, 'members', 'mallory'));
+  return assertFails(b.commit());
+});
+await t('관리자: 코드 변경 + mallory 내보내기 한 번에 성공', () => {
+  const b = writeBatch(owner);
+  b.update(doc(owner, 'families', FID), { code: CODE2 });
+  b.delete(doc(owner, 'families', FID, 'members', 'mallory'));
+  return assertSucceeds(b.commit());
+});
+await t('내보내진 사람은 가족 정보(새 코드) 읽기 불가', () => assertFails(getDoc(doc(mallory, 'families', FID))));
 await t('관리자: 새 초대 코드 등록 성공', () => assertSucceeds(setDoc(doc(owner, 'invites', CODE2), { familyId: FID, createdAt: 2 })));
 await t('관리자: 옛 초대 코드 삭제 성공', () => assertSucceeds(deleteDoc(doc(owner, 'invites', CODE))));
 await t('내보내진 사람 재료 읽기 불가', () => assertFails(getDocs(collection(mallory, 'families', FID, 'items'))));
@@ -174,6 +213,25 @@ await t('명단에 없는 관리자도 넘겨받기 가능', async () => {
   await env.withSecurityRulesDisabled(c => updateDoc(doc(c.firestore(), 'families', FID), { ownerUid: 'ghost' }));
   await assertSucceeds(updateDoc(doc(bob, 'families', FID), { ownerUid: 'bob' }));
 });
+
+console.log('[마지막 멤버가 나갈 때]');
+// 지금 관리자는 bob, 멤버는 bob 뿐. 관리자 명단에서 사라진 상황을 만들고 bob이 마지막으로 정리
+const CODE3 = 'QQQQRRRRSSSS';
+await env.withSecurityRulesDisabled(async c => {
+  const db = c.firestore();
+  await updateDoc(doc(db, 'families', FID), { ownerUid: 'ghost', code: CODE2 });
+  await setDoc(doc(db, 'invites', CODE2), { familyId: FID, createdAt: 2 });
+});
+await t('마지막 멤버: 사라진 관리자 넘겨받기 성공', () => assertSucceeds(updateDoc(doc(bob, 'families', FID), { ownerUid: 'bob' })));
+await t('마지막 멤버: 초대 코드 삭제 + 코드 바꾸기 한 번에 성공', () => {
+  const b = writeBatch(bob);
+  b.delete(doc(bob, 'invites', CODE2));
+  b.update(doc(bob, 'families', FID), { code: CODE3 });
+  return assertSucceeds(b.commit());
+});
+await t('마지막 멤버: 탈퇴 성공', () => assertSucceeds(deleteDoc(doc(bob, 'families', FID, 'members', 'bob'))));
+await t('정리 뒤 옛 코드로 가입 불가', () => assertFails(setDoc(doc(mallory, 'families', FID, 'members', 'mallory'), { name: '?', joinedAt: Date.now(), code: CODE2 })));
+await t('정리 뒤 초대 코드 조회 결과 없음', async () => { const d = await getDoc(doc(mallory, 'invites', CODE2)); if (d.exists()) throw new Error('exists'); });
 
 console.log(`\n결과: 통과 ${pass} / 실패 ${fail}`);
 await env.cleanup();

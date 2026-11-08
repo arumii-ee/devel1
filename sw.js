@@ -2,7 +2,7 @@
  * 서비스 워커: 앱 파일을 휴대폰에 저장해 두고 인터넷 없이도 실행되게 합니다.
  * 인터넷이 되면 항상 최신 파일을 받으므로, 앱을 고쳐 GitHub에 올리면 다음 실행부터 바로 반영됩니다.
  */
-var CACHE_VERSION = 'fridge-v12';
+var CACHE_VERSION = 'fridge-v13';
 var NETWORK_TIMEOUT = 3000; // 이 시간 안에 응답이 없으면 저장해 둔 파일로 먼저 실행
 
 var APP_FILES = [
@@ -19,13 +19,16 @@ var APP_FILES = [
   './js/storage.js',
   './js/ingredients.js',
   './js/memos.js',
+  './js/shopping.js',
   './js/firebase-config.js',
   './js/family.js',
   './js/recipe-data.js',
   './js/recipes.js',
   './js/app.js',
   './js/family-ui.js',
+  './js/backup.js',
   './js/memo-ui.js',
+  './js/shopping-ui.js',
   './js/pwa.js',
   // 가족 공유용 Firebase (업데이트 뒤 오프라인에서도 가족 냉장고가 열리도록 미리 저장)
   './vendor/firebase/firebase-app-compat.js',

@@ -13,6 +13,7 @@
  *  families/{familyId}/items/{itemId}  재료
  *  families/{familyId}/memos/{memoId}  메모 { id, text, createdAt, by, updatedAt?, editedBy?, comments? }
  *                                      comments: { [댓글 id]: { id, text, createdAt, by, updatedAt?, editedBy? } }
+ *  families/{familyId}/shopping/{id}   장보기 { id, name, done, createdAt, by, doneAt?, doneBy? }
  *  invites/{code}                      { familyId, createdAt }
  */
 (function (Fridge) {
@@ -30,6 +31,7 @@
 
   var store = Fridge.storage;
   var memos = Fridge.memos;
+  var shopping = Fridge.shopping;
   var fb = null;          // { db, auth, uid }
   var fbPromise = null;
   var conn = null;        // 현재 연결 { familyId, name, unsubs[], adapter }
@@ -321,6 +323,57 @@
     };
   }
 
+  /* ---------- 장보기 어댑터 (shopping.js 와 같은 모양) ---------- */
+
+  function createShoppingAdapter(fid, name, onDenied) {
+    var col = familyRef(fid).collection('shopping');
+
+    function report(p) {
+      p.catch(function (e) {
+        if (e && e.code === 'permission-denied') onDenied(e);
+        else if (e && e.code === 'not-found') return; // 그사이 다른 가족이 지움
+        else store.setStatus('error', e);
+      });
+      return Promise.resolve();
+    }
+
+    function clean(it) {
+      var out = {
+        id: String(it.id), name: String(it.name).slice(0, shopping.NAME_MAX),
+        done: !!it.done, createdAt: it.createdAt, by: cleanName(it.by) || name
+      };
+      if (typeof it.doneAt === 'number') out.doneAt = it.doneAt;
+      if (it.doneBy) out.doneBy = cleanName(it.doneBy);
+      return out;
+    }
+
+    return {
+      name: 'family',
+      author: function () { return name; },
+      setName: function (n) { name = n; },
+      list: function () {
+        return col.get().then(function (snap) { return snap.docs.map(function (d) { return d.data(); }); });
+      },
+      add: function (it) { return report(col.doc(String(it.id)).set(clean(it))); },
+      update: function (id, fields) {
+        var data = {};
+        if ('name' in fields) data.name = String(fields.name).slice(0, shopping.NAME_MAX);
+        if ('done' in fields) data.done = !!fields.done;
+        if (typeof fields.doneAt === 'number') data.doneAt = fields.doneAt;
+        if (fields.doneBy) data.doneBy = cleanName(fields.doneBy);
+        return report(col.doc(id).update(data));
+      },
+      remove: function (id) { return report(col.doc(id).delete()); },
+      subscribe: function (cb) {
+        return col.onSnapshot(function (snap) {
+          cb(snap.docs.map(function (d) { return d.data(); }));
+        }, function (e) {
+          if (e && e.code === 'permission-denied') onDenied(e);
+        });
+      }
+    };
+  }
+
   /* ---------- 연결 / 끊기 ---------- */
 
   function detach() {
@@ -338,6 +391,7 @@
     save(null);
     store.use(store.local);
     memos.use(memos.local);
+    shopping.use(shopping.local);
     emitChange();
     Fridge.family.onRemoved && Fridge.family.onRemoved();
   }
@@ -362,6 +416,7 @@
     store.setStatus('connecting');
     store.use(store.pending());
     memos.use(memos.pending());
+    shopping.use(shopping.pending());
     return ensureFirebase().then(function () {
       var c = { familyId: fid, name: name, unsubs: [] };
       conn = c;
@@ -400,7 +455,9 @@
 
       c.adapter = createFamilyAdapter(fid, name, denied);
       c.memoAdapter = createMemoAdapter(fid, name, denied);
+      c.shopAdapter = createShoppingAdapter(fid, name, denied);
       memos.use(c.memoAdapter);
+      shopping.use(c.shopAdapter);
       return store.use(c.adapter);
     }).catch(function (e) {
       store.setStatus('error', e);
@@ -511,6 +568,14 @@
     });
   }
 
+  // 가족 코드를 바꾼 뒤: 새 초대 코드 등록 + 옛 초대 코드 삭제
+  // (초대 코드 등록 규칙이 "가족의 지금 코드와 같은지"를 보므로 가족 코드를 바꾼 다음에 해야 함)
+  function registerInvite(fid, code, oldCode) {
+    return withTimeout(inviteRef(code).set({ familyId: fid, createdAt: Date.now() })).then(function () {
+      return oldCode ? withTimeout(inviteRef(oldCode).delete()).catch(function () {}) : null;
+    }).then(function () { return code; });
+  }
+
   // 관리자: 코드 바꾸기 (옛 코드로는 더 이상 가입 불가, 이미 멤버인 기기는 그대로)
   function rotateCode() {
     if (!conn || !isOwner()) return Promise.reject(err('not-owner'));
@@ -518,20 +583,24 @@
     var oldCode = state.code;
     var code = newCode();
     return withTimeout(familyRef(fid).update({ code: code })).then(function () {
-      return withTimeout(inviteRef(code).set({ familyId: fid, createdAt: Date.now() }));
-    }).then(function () {
-      return oldCode ? withTimeout(inviteRef(oldCode).delete()).catch(function () {}) : null;
-    }).then(function () { return code; });
+      return registerInvite(fid, code, oldCode);
+    });
   }
 
   // 관리자: 멤버 내보내기 + 코드 자동 변경
+  // 코드 변경과 내보내기를 한 번에(batch) 처리: 코드를 먼저 바꾸면 내보낼 사람이 아직 멤버인 동안
+  // 실시간 연결로 새 코드를 받아 볼 수 있고, 나중에 바꾸면 그 사이 옛 코드로 다시 들어올 수 있음
   function kick(uid) {
     if (!conn || !isOwner()) return Promise.reject(err('not-owner'));
     if (uid === fb.uid) return Promise.reject(err('self'));
     var fid = conn.familyId;
-    // 코드를 먼저 바꿔야, 내보낸 뒤 코드 변경이 실패해도 옛 코드로 다시 들어올 수 없음
-    return rotateCode().then(function () {
-      return withTimeout(familyRef(fid).collection('members').doc(uid).delete());
+    var oldCode = state.code;
+    var code = newCode();
+    var batch = fb.db.batch();
+    batch.update(familyRef(fid), { code: code });
+    batch.delete(familyRef(fid).collection('members').doc(uid));
+    return withTimeout(batch.commit()).then(function () {
+      return registerInvite(fid, code, oldCode);
     });
   }
 
@@ -542,6 +611,7 @@
     if (!conn || !fb) {
       detach(); info = null; save(null);
       memos.use(memos.local);
+      shopping.use(shopping.local);
       return store.use(store.local).then(emitChange);
     }
     var c = conn;
@@ -556,7 +626,8 @@
       fam.collection('members').get({ source: 'server' }),
       fam.get({ source: 'server' }),
       col.get({ source: 'server' }),
-      fam.collection('memos').get({ source: 'server' })
+      fam.collection('memos').get({ source: 'server' }),
+      fam.collection('shopping').get({ source: 'server' })
     ])).then(function (r) {
       var others = r[0].docs
         .filter(function (d) { return d.id !== fb.uid; })
@@ -572,10 +643,16 @@
         return withTimeout(fam.update({ ownerUid: others[0].uid }));
       }
       if (!others.length) {
-        // 정말 마지막 멤버일 때만: 재료 · 메모 · 초대 코드 삭제
-        var ops = r[2].docs.concat(r[3].docs).map(function (d) { return function (b) { b.delete(d.ref); }; });
-        if (owner && famData.code) ops.push(function (b) { b.delete(inviteRef(famData.code)); });
-        return commitInChunks(ops);
+        // 정말 마지막 멤버일 때만: 재료 · 메모 · 장보기 · 초대 코드 삭제
+        // 가족 문서는 규칙상 지울 수 없으므로, 초대 코드 없는 새 코드로 바꿔 아무도 다시 들어올 수 없게 함
+        // 관리자가 아니면(관리자가 먼저 사라짐) 먼저 관리자를 넘겨받아야 초대 코드를 지우고 코드를 바꿀 수 있음
+        var claim = owner || !r[1].exists ? Promise.resolve() : withTimeout(fam.update({ ownerUid: fb.uid }));
+        return claim.then(function () {
+          var ops = r[2].docs.concat(r[3].docs, r[4].docs).map(function (d) { return function (b) { b.delete(d.ref); }; });
+          if (famData.code) ops.push(function (b) { b.delete(inviteRef(famData.code)); });
+          if (r[1].exists) ops.push(function (b) { b.update(fam, { code: newCode() }); });
+          return commitInChunks(ops);
+        });
       }
     }).then(function () {
       c.unsubs.forEach(function (u) { try { u(); } catch (e) { /* 무시 */ } });
@@ -602,6 +679,7 @@
       return store.local.replaceAll(copy);
     }).then(function () {
       memos.use(memos.local);
+      shopping.use(shopping.local);
       return store.use(store.local);
     }).then(emitChange, function (e) {
       if (conn === c) {
@@ -621,6 +699,7 @@
     conn.name = name;
     if (conn.adapter && conn.adapter.setName) conn.adapter.setName(name);
     if (conn.memoAdapter) conn.memoAdapter.setName(name);
+    if (conn.shopAdapter) conn.shopAdapter.setName(name);
     return withTimeout(familyRef(conn.familyId).collection('members').doc(fb.uid).update({ name: name }));
   }
 

@@ -318,6 +318,7 @@
     else if (F.fileMode) renderFileMode(body);
     else if (!F.info) renderJoinForm(body);
     else renderJoined(body);
+    if (Fridge.backup) Fridge.backup.renderSection(body);
   }
 
   /* ---------- 열기 / 닫기 ---------- */
