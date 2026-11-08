@@ -2,7 +2,7 @@ rules_version = '2';
 // 냉장고 - 가족 공유 보안 규칙
 // ---------------------------------------------------------------
 // - 모든 접근은 로그인(익명 로그인)이 필요합니다.
-// - 가족 냉장고의 재료와 메모(댓글 포함)는 "멤버 명단"에 있는 기기만 읽고 쓸 수 있습니다.
+// - 가족 냉장고의 재료 · 메모(댓글 포함) · 장보기 목록은 "멤버 명단"에 있는 기기만 읽고 쓸 수 있습니다.
 // - 멤버가 되려면 현재 유효한 가족 코드(12자리)를 알아야 합니다.
 // - 관리자(만든 사람)는 멤버를 내보내고 코드를 바꿀 수 있습니다.
 // - 관리자가 30일 넘게 안 들어오면 다른 멤버가 관리자를 넘겨받을 수 있습니다.
@@ -55,8 +55,13 @@ service cloud.firestore {
         && d.createdAt is number && d.updatedAt is number
         && optionalName(d, 'addedBy') && optionalName(d, 'updatedBy');
     }
+    // 시각은 미래(10분 넘게)로 못 씀 (기기 시계가 조금 빠른 것은 허용)
     function notFuture(t) {
       return t is number && t <= request.time.toMillis() + 600000;
+    }
+    // 재료를 새로 넣을 때는 두 시각 모두, 고칠 때는 고친 시각만 검사 (예전에 저장된 재료도 고칠 수 있게)
+    function validItemTimes(d, isNew) {
+      return notFuture(d.updatedAt) && (!isNew || notFuture(d.createdAt));
     }
     function optionalTime(d, key) {
       return !(key in d) || notFuture(d[key]);
@@ -73,6 +78,8 @@ service cloud.firestore {
         && (!('comments' in d) || (d.comments is map && d.comments.size() <= 100))
         && (!('lastCommentId' in d) || (d.lastCommentId is string && d.lastCommentId.size() > 0 && d.lastCommentId.size() <= 40));
     }
+    // 알려진 한계: 메모를 새로 쓸 때(지운 메모 되돌리기) comments 안의 댓글 하나하나는 검사하지 못함
+    // (규칙 언어에 반복문이 없음). 개수(100개)와 문서 크기(1MB) 제한만 걸리며, 멤버만 쓸 수 있음.
     // 댓글: 글 1~200자, 시각은 미래로 못 씀, 이름 10자 이하
     function validComment(c, cid) {
       return c is map
@@ -101,6 +108,18 @@ service cloud.firestore {
         && now.diff(was).affectedKeys().hasOnly([cid])
         && (!(cid in now) || (validComment(now[cid], cid)
           && (!(cid in was) || (now[cid].createdAt == was[cid].createdAt && now[cid].by == was[cid].by))));
+    }
+
+    // 장보기: 이름 1~40자, 산 것(done) 표시, 남긴 사람 · 시각
+    function validShop(d, shopId) {
+      return d.keys().hasAll(['id', 'name', 'done', 'createdAt', 'by'])
+        && d.keys().hasOnly(['id', 'name', 'done', 'createdAt', 'by', 'doneAt', 'doneBy'])
+        && d.id == shopId
+        && d.name is string && d.name.size() > 0 && d.name.size() <= 40
+        && d.done is bool
+        && notFuture(d.createdAt)
+        && validName(d.by) && d.by.size() > 0
+        && optionalTime(d, 'doneAt') && optionalName(d, 'doneBy');
     }
 
     // 초대 코드 → 가족 찾기. 코드를 정확히 알아야만 읽을 수 있고, 목록 보기는 불가
@@ -144,7 +163,7 @@ service cloud.firestore {
           && exists(familyPath(fid))
           && request.resource.data.keys().hasOnly(['name', 'joinedAt', 'code'])
           && validName(request.resource.data.name)
-          && request.resource.data.joinedAt is number
+          && notFuture(request.resource.data.joinedAt)
           && request.resource.data.code == family(fid).code;
         // 본인 이름 · 마지막 접속 시각(lastSeen)만 수정
         allow update: if signedIn() && request.auth.uid == uid
@@ -159,7 +178,10 @@ service cloud.firestore {
 
       match /items/{itemId} {
         allow read, delete: if isMember(fid);
-        allow create, update: if isMember(fid) && validItem(request.resource.data, itemId);
+        allow create: if isMember(fid) && validItem(request.resource.data, itemId)
+          && validItemTimes(request.resource.data, true);
+        allow update: if isMember(fid) && validItem(request.resource.data, itemId)
+          && validItemTimes(request.resource.data, false);
       }
 
       // 메모와 댓글: 멤버 누구나 쓰고 · 고치고 · 지울 수 있음
@@ -170,6 +192,15 @@ service cloud.firestore {
         allow update: if isMember(fid) && validMemo(request.resource.data, memoId)
           && (editsMemoText(resource.data, request.resource.data)
             || changesOneComment(resource.data, request.resource.data));
+      }
+
+      // 장보기 목록: 멤버 누구나 넣고 · 체크하고 · 이름 고치고 · 지울 수 있음
+      // 고칠 때 남긴 사람 · 시각은 바꿀 수 없음
+      match /shopping/{shopId} {
+        allow read, delete: if isMember(fid);
+        allow create: if isMember(fid) && validShop(request.resource.data, shopId);
+        allow update: if isMember(fid) && validShop(request.resource.data, shopId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'done', 'doneAt', 'doneBy']);
       }
     }
   }

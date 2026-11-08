@@ -28,7 +28,8 @@
     deleteBtn: $('deleteBtn'), cancelBtn: $('cancelBtn'), saveBtn: $('saveBtn'),
     recipeBtn: $('recipeBtn'), recipePanel: $('recipePanel'), recipeBack: $('recipeBack'),
     recipeBody: $('recipeBody'), recipeSub: $('recipeSub'), recipeTabs: $('recipeTabs'),
-    toast: $('toast'), toastText: $('toastText'), toastAction: $('toastAction')
+    toast: $('toast'), toastText: $('toastText'), toastAction: $('toastAction'), toastAction2: $('toastAction2'),
+    cleanupBtn: $('cleanupBtn')
   };
 
   /* ---------- 렌더링 ---------- */
@@ -136,6 +137,11 @@
     items.forEach(function (it) { frag.appendChild(renderItem(it)); });
     els.list.appendChild(frag);
 
+    // 다 떨어진 재료 정리 버튼 (지금 보이는 목록 기준)
+    var out = items.filter(function (it) { return it.quantity <= 0; }).length;
+    els.cleanupBtn.hidden = !out;
+    if (out) els.cleanupBtn.textContent = '🧹 다 떨어진 재료 ' + out + '개 정리';
+
     // 개수
     var counts = { all: state.items.length, fridge: 0, freezer: 0, pantry: 0 };
     var expired = 0, urgent = 0, soon = 0;
@@ -220,13 +226,14 @@
 
   var submitting = false;
 
-  function openSheet(item) {
+  // item: 고칠 재료 (없으면 새로 추가), prefill: 새로 추가할 때 미리 채울 값 { name } (장보기에서 넣을 때)
+  function openSheet(item, prefill) {
     state.editingId = item ? item.id : null;
     setSubmitting(false);
     els.title.textContent = item ? '재료 수정' : '재료 추가';
     els.deleteBtn.hidden = !item;
     els.nameError.hidden = true;
-    els.name.value = item ? item.name : '';
+    els.name.value = item ? item.name : (prefill && prefill.name ? String(prefill.name).slice(0, 40) : '');
     els.qty.value = item ? I.formatQty(item.quantity) : '1';
     els.unit.value = item ? item.unit : '';
     els.expiry.value = item && item.expiry ? item.expiry : '';
@@ -240,7 +247,7 @@
       els.sheet.classList.add('show');
     });
     document.body.classList.add('no-scroll');
-    if (!item) setTimeout(function () { els.name.focus(); }, 250);
+    if (!item && !(prefill && prefill.name)) setTimeout(function () { els.name.focus(); }, 250);
 
     openOverlay('sheet', hideSheet);
   }
@@ -405,16 +412,22 @@
 
   /* ---------- 토스트 ---------- */
 
+  // toast(글) · toast(글, 버튼 이름, 누르면 할 일) · toast(글, [{ label, onClick }, …최대 2개])
   var toastTimer = null;
   function toast(msg, actionLabel, onAction) {
+    var actions = Array.isArray(actionLabel) ? actionLabel
+      : onAction ? [{ label: actionLabel, onClick: onAction }] : [];
     els.toastText.textContent = msg;
-    els.toastAction.hidden = !onAction;
-    if (onAction) els.toastAction.textContent = actionLabel;
-    els.toastAction.onclick = onAction ? function () { hideToast(); onAction(); } : null;
+    [els.toastAction, els.toastAction2].forEach(function (b, i) {
+      var a = actions[i];
+      b.hidden = !a;
+      b.textContent = a ? a.label : '';
+      b.onclick = a ? function () { hideToast(); a.onClick(); } : null;
+    });
     els.toast.hidden = false;
     requestAnimationFrame(function () { els.toast.classList.add('show'); });
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(hideToast, onAction ? 5000 : 2200);
+    toastTimer = setTimeout(hideToast, actions.length ? 5000 : 2200);
   }
   function hideToast() {
     els.toast.classList.remove('show');
@@ -511,12 +524,40 @@
     var next = I.clampQty(value);
     if (next === item.quantity) return;
     store.update(id, { quantity: next }).catch(function () { saveFailed(); render(); });
-    if (next === 0) toast('“' + item.name + '” 다 떨어졌어요', '삭제', function () { removeItem(id); });
+    if (next === 0) {
+      toast('“' + item.name + '” 다 떨어졌어요', [
+        { label: '장보기 추가', onClick: function () { addToShopping(item.name); } },
+        { label: '삭제', onClick: function () { removeItem(id); } }
+      ]);
+    }
+  }
+
+  function addToShopping(name) {
+    Fridge.shopping.add(name).then(function () {
+      toast('“' + name + '” 장보기에 넣었어요');
+    }, function (e) {
+      if (e && e.message === 'duplicate') toast('“' + name + '”은(는) 이미 장보기에 있어요');
+      else saveFailed();
+    });
+  }
+
+  // 다 떨어진 재료 한 번에 지우기 (지금 보이는 목록 기준, 실행 취소 가능)
+  function cleanupOut() {
+    var out = visibleItems().filter(function (it) { return it.quantity <= 0; });
+    if (!out.length) return;
+    if (!window.confirm('다 떨어진 재료 ' + out.length + '개를 지울까요?\n' +
+        out.slice(0, 5).map(function (it) { return '· ' + it.name; }).join('\n') + (out.length > 5 ? '\n…' : ''))) return;
+    Promise.all(out.map(function (it) { return store.remove(it.id); })).then(function () {
+      toast(out.length + '개 정리했어요', '실행 취소', function () {
+        Promise.all(out.map(function (it) { return store.add(it); })).catch(saveFailed);
+      });
+    }, saveFailed);
   }
 
   /* ---------- 이벤트 연결 ---------- */
 
   els.addBtn.addEventListener('click', function () { openSheet(null); });
+  els.cleanupBtn.addEventListener('click', cleanupOut);
   els.cancelBtn.addEventListener('click', closeSheet);
   els.backdrop.addEventListener('click', closeSheet);
   els.form.addEventListener('submit', onSubmit);
@@ -761,7 +802,8 @@
     openOverlay: openOverlay,
     closeOverlay: closeOverlay,
     unlockScroll: unlockScroll,
-    openAdd: function () { openSheet(null); },
+    openAdd: function (prefill) { openSheet(null, prefill); },
+    get items() { return state.items; },
     openRecipes: openRecipes
   };
 

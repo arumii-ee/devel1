@@ -1,6 +1,7 @@
 /*
  * 메모 화면
  * ---------------------------------------------------------------
+ * - 화면 위 탭으로 메모 / 장보기(js/shopping-ui.js) 전환 (마지막 탭은 이 기기에 기억)
  * - 메모 남기기 · 고치기 · 지우기(실행 취소 가능)
  * - 메모마다 댓글 달기 · 고치기 · 지우기(실행 취소 가능)
  * 가족이 메모를 바꿔서 화면을 다시 그려도, 쓰던 글과 커서 위치는 그대로 둡니다.
@@ -19,8 +20,35 @@
   var els = {
     btn: $('memoBtn'), panel: $('memoPanel'), back: $('memoBack'), sub: $('memoSub'),
     form: $('memoForm'), text: $('memoText'), count: $('memoCount'), save: $('memoSave'),
-    list: $('memoList'), empty: $('memoEmpty')
+    list: $('memoList'), empty: $('memoEmpty'),
+    tabs: $('memoTabs'), memoTab: $('memoTab'), shopTab: $('shopTab'), title: $('memoTitle')
   };
+
+  /* ---------- 탭 (메모 / 장보기) ---------- */
+  var TAB_KEY = 'fridge-app:memoTab';
+  var tab = 'memo';
+  try { if (window.localStorage.getItem(TAB_KEY) === 'shop') tab = 'shop'; } catch (e) { /* 기본값 */ }
+
+  function showTab(name) {
+    tab = name === 'shop' ? 'shop' : 'memo';
+    try { window.localStorage.setItem(TAB_KEY, tab); } catch (e) { /* 이번 화면에서만 */ }
+    els.tabs.querySelectorAll('.rtab').forEach(function (b) {
+      var on = b.dataset.tab === tab;
+      b.classList.toggle('is-active', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    els.memoTab.hidden = tab !== 'memo';
+    els.shopTab.hidden = tab !== 'shop';
+    els.title.textContent = tab === 'shop' ? '장보기' : '메모';
+    if (tab === 'shop') { if (Fridge.shopUI) Fridge.shopUI.render(); }
+    else render();
+    els.panel.scrollTop = 0;
+  }
+
+  els.tabs.addEventListener('click', function (e) {
+    var b = e.target.closest('.rtab');
+    if (b && b.dataset.tab !== tab) showTab(b.dataset.tab);
+  });
 
   /* ---------- 화면 상태 ---------- */
   // 고치는 중: null | { memoId, commentId(댓글일 때) , text(쓰는 중인 글) }
@@ -218,9 +246,11 @@
         ui.toast('고치던 ' + (m ? '댓글' : '메모') + '가 삭제됐어요');
       }
     }
-    els.sub.textContent = M.mode === 'family' ? '가족과 함께 보는 메모'
-      : M.mode === 'pending' ? '가족 메모 불러오는 중…'
-      : '이 기기에만 저장돼요';
+    if (tab === 'memo') {
+      els.sub.textContent = M.mode === 'family' ? '가족과 함께 보는 메모'
+        : M.mode === 'pending' ? '가족 메모 불러오는 중…'
+        : '이 기기에만 저장돼요';
+    }
     var f = rememberFocus();
     els.list.textContent = '';
     var frag = document.createDocumentFragment();
@@ -242,8 +272,8 @@
 
   /* ---------- 열기 / 닫기 ---------- */
 
-  function open() {
-    render();
+  function open(which) {
+    showTab(typeof which === 'string' ? which : tab);
     els.panel.hidden = false;
     els.panel.scrollTop = 0;
     requestAnimationFrame(function () { els.panel.classList.add('show'); });
@@ -419,9 +449,15 @@
     }, 150);
   });
 
-  els.btn.addEventListener('click', open);
+  els.btn.addEventListener('click', function () { open(); });
   els.back.addEventListener('click', function () { ui.closeOverlay('memos'); });
 
-  M.subscribe(function () { if (!els.panel.hidden) render(); });
+  M.subscribe(function () { if (!els.panel.hidden && tab === 'memo') render(); });
+
+  Fridge.memoUI = {
+    open: open,
+    get tab() { return tab; },
+    get isOpen() { return !els.panel.hidden; }
+  };
   updateCount();
 })(window.Fridge = window.Fridge || {});
